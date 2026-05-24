@@ -1,5 +1,5 @@
 # VAPTSecurityFull-QWenCoder
-# VAPT Security This is a WordPress Plugin Initially Created for Gargash Group - Gargash Equipment Solutions https://gargashequipmentsolutions.com
+** VAPT Security This is a WordPress Plugin Initially Created for Gargash Group - Gargash Equipment Solutions https://gargashequipmentsolutions.com
 
 * Now being adopted to test QWen-Coder's Coding Capabilities
 https://coder.qwen.ai/
