@@ -1,0 +1,238 @@
+{
+  "T:\\~\\Local925 Sites\\vaptsecure\\app\\public\\wp-content\\plugins\\VAPTSecurity-Full\\index.php": {
+    "mtime": 1779170030.205,
+    "hash": "ea7a1bf7a63d76b0f68acc5df7d3e356"
+  },
+  "T:\\~\\Local925 Sites\\vaptsecure\\app\\public\\wp-content\\plugins\\VAPTSecurity-Full\\test-config.php": {
+    "mtime": 1779170030.452,
+    "hash": "236bb1610e89d9b2205e15177dc74538"
+  },
+  "T:\\~\\Local925 Sites\\vaptsecure\\app\\public\\wp-content\\plugins\\VAPTSecurity-Full\\test-integrations-mock.php": {
+    "mtime": 1779170030.486,
+    "hash": "f20474101004ef75b1d8981c031d5a08"
+  },
+  "T:\\~\\Local925 Sites\\vaptsecure\\app\\public\\wp-content\\plugins\\VAPTSecurity-Full\\test-vapt-features.php": {
+    "mtime": 1779170030.518,
+    "hash": "79092ad3eb5f3bc10d957d70fe3ac2aa"
+  },
+  "T:\\~\\Local925 Sites\\vaptsecure\\app\\public\\wp-content\\plugins\\VAPTSecurity-Full\\uninstall.php": {
+    "mtime": 1779446456.5344844,
+    "hash": "64d49ac8f300a6d0e52085960d4cf749"
+  },
+  "T:\\~\\Local925 Sites\\vaptsecure\\app\\public\\wp-content\\plugins\\VAPTSecurity-Full\\vapt-config-sample.php": {
+    "mtime": 1779446456.5641408,
+    "hash": "bb8c4e32bcf0e0ef57284ae5caeb1c10"
+  },
+  "T:\\~\\Local925 Sites\\vaptsecure\\app\\public\\wp-content\\plugins\\VAPTSecurity-Full\\vapt-config.php": {
+    "mtime": 1779170030.84,
+    "hash": "0c15d6c69fcf0850c422850fce5b15e5"
+  },
+  "T:\\~\\Local925 Sites\\vaptsecure\\app\\public\\wp-content\\plugins\\VAPTSecurity-Full\\vapt-diagnostics.php": {
+    "mtime": 1779471462.7737129,
+    "hash": "7b8bf513c8652dae5fc27cce6f4844d4"
+  },
+  "T:\\~\\Local925 Sites\\vaptsecure\\app\\public\\wp-content\\plugins\\VAPTSecurity-Full\\vapt-security.php": {
+    "mtime": 1779483230.2661154,
+    "hash": "b1f2aa6dd9dc14f37fd3cd8b7b034e9b"
+  },
+  "T:\\~\\Local925 Sites\\vaptsecure\\app\\public\\wp-content\\plugins\\VAPTSecurity-Full\\assets\\js\\vapt-security.js": {
+    "mtime": 1779170029.67,
+    "hash": "037c17958aeee44adade9ca5a63646b6"
+  },
+  "T:\\~\\Local925 Sites\\vaptsecure\\app\\public\\wp-content\\plugins\\VAPTSecurity-Full\\includes\\captcha.php": {
+    "mtime": 1779170029.813,
+    "hash": "0dec2c77ebb2a8b8cf712c727e9b0236"
+  },
+  "T:\\~\\Local925 Sites\\vaptsecure\\app\\public\\wp-content\\plugins\\VAPTSecurity-Full\\includes\\class-captcha-handler.php": {
+    "mtime": 1779170029.841,
+    "hash": "71db83f8d6434fe5bb1f3f6b05cf17b3"
+  },
+  "T:\\~\\Local925 Sites\\vaptsecure\\app\\public\\wp-content\\plugins\\VAPTSecurity-Full\\includes\\class-encryption.php": {
+    "mtime": 1779446456.0587606,
+    "hash": "27d6e4d0d216ff03fe4d8a55eb1be5be"
+  },
+  "T:\\~\\Local925 Sites\\vaptsecure\\app\\public\\wp-content\\plugins\\VAPTSecurity-Full\\includes\\class-features.php": {
+    "mtime": 1779446471.9045918,
+    "hash": "070328ad55441b61c9b9f50e23280536"
+  },
+  "T:\\~\\Local925 Sites\\vaptsecure\\app\\public\\wp-content\\plugins\\VAPTSecurity-Full\\includes\\class-hardening.php": {
+    "mtime": 1779446456.114952,
+    "hash": "5e630d62d83e127751ed97588b816b56"
+  },
+  "T:\\~\\Local925 Sites\\vaptsecure\\app\\public\\wp-content\\plugins\\VAPTSecurity-Full\\includes\\class-input-validator.php": {
+    "mtime": 1779170029.927,
+    "hash": "bb53b73ca06536bac4e88637d0ed44f2"
+  },
+  "T:\\~\\Local925 Sites\\vaptsecure\\app\\public\\wp-content\\plugins\\VAPTSecurity-Full\\includes\\class-integrations-manager.php": {
+    "mtime": 1779170029.955,
+    "hash": "b54e5f9bb4a885bc8a831ef4ac0b6176"
+  },
+  "T:\\~\\Local925 Sites\\vaptsecure\\app\\public\\wp-content\\plugins\\VAPTSecurity-Full\\includes\\class-license.php": {
+    "mtime": 1779446456.187008,
+    "hash": "11413200c747f1286f979532c86bfc43"
+  },
+  "T:\\~\\Local925 Sites\\vaptsecure\\app\\public\\wp-content\\plugins\\VAPTSecurity-Full\\includes\\class-otp.php": {
+    "mtime": 1779170030.014,
+    "hash": "7a77099d5f88892577c6149549e85260"
+  },
+  "T:\\~\\Local925 Sites\\vaptsecure\\app\\public\\wp-content\\plugins\\VAPTSecurity-Full\\includes\\class-rate-limiter.php": {
+    "mtime": 1779446456.2445877,
+    "hash": "084af44de9117490f0503c68f96b58e6"
+  },
+  "T:\\~\\Local925 Sites\\vaptsecure\\app\\public\\wp-content\\plugins\\VAPTSecurity-Full\\includes\\class-security-logger.php": {
+    "mtime": 1779170030.084,
+    "hash": "16c58d4e28664da7a8d93ed0f31f2f2e"
+  },
+  "T:\\~\\Local925 Sites\\vaptsecure\\app\\public\\wp-content\\plugins\\VAPTSecurity-Full\\includes\\cron.php": {
+    "mtime": 1779170030.116,
+    "hash": "25cd0c7da12afd5a24722c54e55e7c6c"
+  },
+  "T:\\~\\Local925 Sites\\vaptsecure\\app\\public\\wp-content\\plugins\\VAPTSecurity-Full\\includes\\input-validator.php": {
+    "mtime": 1779170030.147,
+    "hash": "e977bba99e9322becdcde3273496e464"
+  },
+  "T:\\~\\Local925 Sites\\vaptsecure\\app\\public\\wp-content\\plugins\\VAPTSecurity-Full\\includes\\rate-limiter.php": {
+    "mtime": 1779170030.173,
+    "hash": "300add14d4b991ef378473d5045e8ffb"
+  },
+  "T:\\~\\Local925 Sites\\vaptsecure\\app\\public\\wp-content\\plugins\\VAPTSecurity-Full\\releases\\configurations\\vapt-hermasnet.com-locked-config.php": {
+    "mtime": 1779335953.8528624,
+    "hash": "a0adb2e6f669a95ff8a32820dc70fa48"
+  },
+  "T:\\~\\Local925 Sites\\vaptsecure\\app\\public\\wp-content\\plugins\\VAPTSecurity-Full\\releases\\configurations\\vapt-locked-config.php": {
+    "mtime": 1779446456.3839645,
+    "hash": "47070139e2a1557a6102f47175182023"
+  },
+  "T:\\~\\Local925 Sites\\vaptsecure\\app\\public\\wp-content\\plugins\\VAPTSecurity-Full\\releases\\configurations\\vapt-vaptsecure-locked-config.php": {
+    "mtime": 1779300330.2262218,
+    "hash": "381764df4ce2ea7734bd21d6f8175812"
+  },
+  "T:\\~\\Local925 Sites\\vaptsecure\\app\\public\\wp-content\\plugins\\VAPTSecurity-Full\\releases\\configurations\\vapt-wptest-locked-config.php": {
+    "mtime": 1779276458.7723596,
+    "hash": "cca6c949a6e6b997704ebc44a74bb1d5"
+  },
+  "T:\\~\\Local925 Sites\\vaptsecure\\app\\public\\wp-content\\plugins\\VAPTSecurity-Full\\templates\\admin-domain-control.php": {
+    "mtime": 1779480453.8672473,
+    "hash": "ac4b433711124828f210939b6c3caa13"
+  },
+  "T:\\~\\Local925 Sites\\vaptsecure\\app\\public\\wp-content\\plugins\\VAPTSecurity-Full\\templates\\admin-otp-settings.php": {
+    "mtime": 1779170030.335,
+    "hash": "6596f04fd885863de406b9b87f17dc49"
+  },
+  "T:\\~\\Local925 Sites\\vaptsecure\\app\\public\\wp-content\\plugins\\VAPTSecurity-Full\\templates\\admin-settings.php": {
+    "mtime": 1779446456.476976,
+    "hash": "098281cb9c8c96d47fe8a74529a4d694"
+  },
+  "T:\\~\\Local925 Sites\\vaptsecure\\app\\public\\wp-content\\plugins\\VAPTSecurity-Full\\templates\\form-template.php": {
+    "mtime": 1779170030.412,
+    "hash": "682f3ef644120c6df7cf5821f65568a5"
+  },
+  "T:\\~\\Local925 Sites\\vaptsecure\\app\\public\\wp-content\\plugins\\VAPTSecurity-Full\\tests\\test-plugin-structure.php": {
+    "mtime": 1779170030.571,
+    "hash": "6b8a4583db83a264c231fa420c875b7f"
+  },
+  "T:\\~\\Local925 Sites\\vaptsecure\\app\\public\\wp-content\\plugins\\VAPTSecurity-Full\\tests\\test-rate-limiter.php": {
+    "mtime": 1779170030.598,
+    "hash": "ca939c46f706a1e3868163f87bbae207"
+  },
+  "T:\\~\\Local925 Sites\\vaptsecure\\app\\public\\wp-content\\plugins\\VAPTSecurity-Full\\tests\\verification_auth.php": {
+    "mtime": 1779170030.632,
+    "hash": "66da79b1b2e140abffba29d626be1780"
+  },
+  "T:\\~\\Local925 Sites\\vaptsecure\\app\\public\\wp-content\\plugins\\VAPTSecurity-Full\\tests\\verification_phase2.php": {
+    "mtime": 1779170030.662,
+    "hash": "1471453aac3cded1926af2bec3b4b291"
+  },
+  "T:\\~\\Local925 Sites\\vaptsecure\\app\\public\\wp-content\\plugins\\VAPTSecurity-Full\\tests\\verification_phase3.php": {
+    "mtime": 1779170030.693,
+    "hash": "2bcf4e43f9dbd4f33115e48c0f2cb702"
+  },
+  "T:\\~\\Local925 Sites\\vaptsecure\\app\\public\\wp-content\\plugins\\VAPTSecurity-Full\\ARCHITECTURE.md": {
+    "mtime": 1779170028.374,
+    "hash": "e2d59c20526636baf2690c355d4e1f1b"
+  },
+  "T:\\~\\Local925 Sites\\vaptsecure\\app\\public\\wp-content\\plugins\\VAPTSecurity-Full\\CHANGELOG.md": {
+    "mtime": 1779446471.8496103,
+    "hash": "d57f785e5ea2b7c25b6eb4d8a7c7c02f"
+  },
+  "T:\\~\\Local925 Sites\\vaptsecure\\app\\public\\wp-content\\plugins\\VAPTSecurity-Full\\DOCUMENTATION.md": {
+    "mtime": 1779170028.431,
+    "hash": "b6b0f99ae13c9ab3de40baac2b991083"
+  },
+  "T:\\~\\Local925 Sites\\vaptsecure\\app\\public\\wp-content\\plugins\\VAPTSecurity-Full\\FEATURES.md": {
+    "mtime": 1779170028.458,
+    "hash": "9573334d6250bf220763c247ba75368f"
+  },
+  "T:\\~\\Local925 Sites\\vaptsecure\\app\\public\\wp-content\\plugins\\VAPTSecurity-Full\\Folder Structure.md": {
+    "mtime": 1779170028.486,
+    "hash": "21b7bd02b8b1099457b3cfa7bcdfd809"
+  },
+  "T:\\~\\Local925 Sites\\vaptsecure\\app\\public\\wp-content\\plugins\\VAPTSecurity-Full\\prompt.txt": {
+    "mtime": 1779170030.257,
+    "hash": "8044b2964d7d618dcb9edf6e9cca7dce"
+  },
+  "T:\\~\\Local925 Sites\\vaptsecure\\app\\public\\wp-content\\plugins\\VAPTSecurity-Full\\README.md": {
+    "mtime": 1779170028.541,
+    "hash": "6736cfeeea39469ba1cc44379198b385"
+  },
+  "T:\\~\\Local925 Sites\\vaptsecure\\app\\public\\wp-content\\plugins\\VAPTSecurity-Full\\README.txt": {
+    "mtime": 1779446471.88734,
+    "hash": "ee8516122e2645a61213bf02f64e6ccd"
+  },
+  "T:\\~\\Local925 Sites\\vaptsecure\\app\\public\\wp-content\\plugins\\VAPTSecurity-Full\\SUPERADMIN_GUIDE.md": {
+    "mtime": 1779170028.595,
+    "hash": "2925c7ac5105b3d03d3a4793f886f334"
+  },
+  "T:\\~\\Local925 Sites\\vaptsecure\\app\\public\\wp-content\\plugins\\VAPTSecurity-Full\\USER_GUIDE.md": {
+    "mtime": 1779446456.0354285,
+    "hash": "34f5ac076d33de1485d4acd544bd8835"
+  },
+  "T:\\~\\Local925 Sites\\vaptsecure\\app\\public\\wp-content\\plugins\\VAPTSecurity-Full\\VERSION_CONTROL.md": {
+    "mtime": 1779170029.558,
+    "hash": "9332b8ed90aa9735336d48264c00365f"
+  },
+  "T:\\~\\Local925 Sites\\vaptsecure\\app\\public\\wp-content\\plugins\\VAPTSecurity-Full\\VERSION_HISTORY.md": {
+    "mtime": 1779480505.6202366,
+    "hash": "269f886a15ff57974727e809260682cd"
+  },
+  "T:\\~\\Local925 Sites\\vaptsecure\\app\\public\\wp-content\\plugins\\VAPTSecurity-Full\\DevDocs\\1779475405441-proud-moon.md": {
+    "mtime": 1779478905.102916,
+    "hash": "a44399cf9eb6c18e953fdde8fe2fb365"
+  },
+  "T:\\~\\Local925 Sites\\vaptsecure\\app\\public\\wp-content\\plugins\\VAPTSecurity-Full\\DevDocs\\BUILD-PROCESS.md": {
+    "mtime": 1779446454.3896625,
+    "hash": "eb85ea2eedc90567428c380eb11ce210"
+  },
+  "T:\\~\\Local925 Sites\\vaptsecure\\app\\public\\wp-content\\plugins\\VAPTSecurity-Full\\DevDocs\\BUILD-TRACKING-PLAN-REVIEW.md": {
+    "mtime": 1779478203.4852636,
+    "hash": "8d7437db6da64a74ffdc35ca6e490efe"
+  },
+  "T:\\~\\Local925 Sites\\vaptsecure\\app\\public\\wp-content\\plugins\\VAPTSecurity-Full\\DevDocs\\BUILD-TRACKING-PLAN.md": {
+    "mtime": 1779450239.1992571,
+    "hash": "7609efe0eb8f381c5e73809758ac8604"
+  },
+  "T:\\~\\Local925 Sites\\vaptsecure\\app\\public\\wp-content\\plugins\\VAPTSecurity-Full\\DevDocs\\DOCUMENTATION-UPDATE-PLAN.md": {
+    "mtime": 1779446454.4052677,
+    "hash": "07cdb18a95fbf732b091272898f6fdcc"
+  },
+  "T:\\~\\Local925 Sites\\vaptsecure\\app\\public\\wp-content\\plugins\\VAPTSecurity-Full\\DevDocs\\Enhance-Build-be1767.md": {
+    "mtime": 1779446454.4230573,
+    "hash": "60e81b2cf83505694bf7a55926057c1f"
+  },
+  "T:\\~\\Local925 Sites\\vaptsecure\\app\\public\\wp-content\\plugins\\VAPTSecurity-Full\\kilo\\1779250767194-nimble-meadow.md": {
+    "mtime": 1779446456.2894282,
+    "hash": "52a21187a61a53c1332c2a1bc0b3204d"
+  },
+  "T:\\~\\Local925 Sites\\vaptsecure\\app\\public\\wp-content\\plugins\\VAPTSecurity-Full\\ReqDocs\\Risks.md": {
+    "mtime": 1779446455.954783,
+    "hash": "d64d218f410deaf76a722b6711b00b0e"
+  },
+  "T:\\~\\Local925 Sites\\vaptsecure\\app\\public\\wp-content\\plugins\\VAPTSecurity-Full\\ReqDocs\\SUPERADMIN_GUIDE.md": {
+    "mtime": 1779446455.9663947,
+    "hash": "7cb4b6c637b93d21b03f8b408d525358"
+  },
+  "T:\\~\\Local925 Sites\\vaptsecure\\app\\public\\wp-content\\plugins\\VAPTSecurity-Full\\ReqDocs\\VAPT_Implementation_Plan.md": {
+    "mtime": 1779446456.0137532,
+    "hash": "86bfb4ba5d15df98e3092387ec8e666d"
+  }
+}
