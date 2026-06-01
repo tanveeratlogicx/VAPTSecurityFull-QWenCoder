@@ -1,0 +1,26 @@
+name: Version Consistency Check
+
+on: [push, pull_request]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+      - name: Verify version consistency
+        run: |
+          PLUGIN="VAPTSecurityFull-QWenCoder/vapt-security.php"
+          PACKAGE="VAPTSecurityFull-QWenCoder/package.json"
+          HISTORY="VAPTSecurityFull-QWenCoder/VERSION_HISTORY.md"
+          PLUGIN_VER=$(grep -E '^Version:' $PLUGIN | awk '{print $2}')
+          PACKAGE_VER=$(jq -r '.version' $PACKAGE)
+          HIST_VER=$(grep -E '^## v' $HISTORY | head -1 | sed -E 's/^## v([^ ]+).*/\1/')
+          echo "Plugin version: $PLUGIN_VER"
+          echo "Package version: $PACKAGE_VER"
+          echo "History version: $HIST_VER"
+          if [[ "$PLUGIN_VER" != "$PACKAGE_VER" || "$PACKAGE_VER" != "$HIST_VER" ]]; then
+            echo "Version mismatch!"
+            exit 1
+          fi

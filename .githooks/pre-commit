@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# Pre‑commit hook: ensure version numbers are consistent before allowing a commit.
+
+BASE_DIR=$(git rev-parse --show-toplevel)/VAPTSecurityFull-QWenCoder
+PLUGIN="$BASE_DIR/vapt-security.php"
+PACKAGE="$BASE_DIR/package.json"
+HISTORY="$BASE_DIR/VERSION_HISTORY.md"
+
+# Extract versions
+PLUGIN_VER=$(grep -E '^Version:' "$PLUGIN" | awk '{print $2}')
+PACKAGE_VER=$(jq -r '.version' "$PACKAGE")
+HIST_VER=$(grep -E '^## v' "$HISTORY" | head -1 | sed -E 's/^## v([^ ]+).*/\1/')
+
+if [[ "$PLUGIN_VER" != "$PACKAGE_VER" || "$PACKAGE_VER" != "$HIST_VER" ]]; then
+  echo "Version mismatch detected!"
+  echo "  Plugin header: $PLUGIN_VER"
+  echo "  package.json : $PACKAGE_VER"
+  echo "  VERSION_HISTORY: $HIST_VER"
+  echo "Run the bump script: ./scripts/bump-version.sh"
+  exit 1
+fi
+
+exit 0
