@@ -1,5 +1,6 @@
 name: Version Consistency Check
 
+
 on: [push, pull_request]
 
 jobs:
@@ -11,7 +12,11 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y jq
       - name: Verify version consistency
         run: |
-          PLUGIN="VAPTSecurityFull-QWenCoder/vapt-security.php"
+We need output modified file, but only snippet? Original code only one line given. Likely entire file includes those lines. We'll just output the modified lines. Probably just those lines.```
+// Update paths to point to files directly within the repo root
+          PLUGIN="vapt-security.php"
+          PACKAGE="package.json"
+          HISTORY="VERSION_HISTORY.md"
           PACKAGE="VAPTSecurityFull-QWenCoder/package.json"
           HISTORY="VAPTSecurityFull-QWenCoder/VERSION_HISTORY.md"
           PLUGIN_VER=$(grep -E '^Version:' $PLUGIN | awk '{print $2}')
