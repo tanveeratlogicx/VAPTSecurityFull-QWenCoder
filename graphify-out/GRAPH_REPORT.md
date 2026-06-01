@@ -1,18 +1,13 @@
-# Graph Report - VAPTSecurity-Full  (2026-05-24)
+# Graph Report - .  (2026-06-01)
 
 ## Corpus Check
-- 57 files · ~48,171 words
+- 86 files · ~71,346 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 640 nodes · 770 edges · 65 communities (54 shown, 11 thin omitted)
+- 640 nodes · 770 edges · 67 communities (54 shown, 13 thin omitted)
 - Extraction: 87% EXTRACTED · 13% INFERRED · 0% AMBIGUOUS · INFERRED: 97 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
-
-## Graph Freshness
-- Built from commit: `015b1b54`
-- Run `git rev-parse HEAD` and compare to check if the graph is stale.
-- Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
 - [[_COMMUNITY_Community 0|Community 0]]
@@ -39,8 +34,8 @@
 - [[_COMMUNITY_Community 21|Community 21]]
 - [[_COMMUNITY_Community 22|Community 22]]
 - [[_COMMUNITY_Community 23|Community 23]]
+- [[_COMMUNITY_Community 24|Community 24]]
 - [[_COMMUNITY_Community 25|Community 25]]
-- [[_COMMUNITY_Community 26|Community 26]]
 - [[_COMMUNITY_Community 27|Community 27]]
 - [[_COMMUNITY_Community 28|Community 28]]
 - [[_COMMUNITY_Community 29|Community 29]]
@@ -62,6 +57,8 @@
 - [[_COMMUNITY_Community 45|Community 45]]
 - [[_COMMUNITY_Community 46|Community 46]]
 - [[_COMMUNITY_Community 47|Community 47]]
+- [[_COMMUNITY_Community 48|Community 48]]
+- [[_COMMUNITY_Community 49|Community 49]]
 
 ## God Nodes (most connected - your core abstractions)
 1. `VAPT_Security` - 69 edges
@@ -78,15 +75,15 @@
 ## Surprising Connections (you probably didn't know these)
 - None detected - all connections are within the same source files.
 
-## Communities (65 total, 11 thin omitted)
+## Communities (67 total, 13 thin omitted)
 
 ### Community 0 - "Community 0"
 Cohesion: 0.05
-Nodes (7): VAPT_Encryption, VAPT_License, VAPT_OTP, esc_html_e(), set_transient(), sanitize_text_field(), VAPT_Security
+Nodes (6): VAPT_Encryption, VAPT_License, esc_html_e(), set_transient(), sanitize_text_field(), VAPT_Security
 
 ### Community 1 - "Community 1"
 Cohesion: 0.06
-Nodes (9): VAPT_Features, VAPT_Hardening, VAPT_Integrations_Manager, VAPT_Cron, wp_die(), add_action(), add_filter(), is_wp_error() (+1 more)
+Nodes (14): VAPT_Input_Validator, VAPT_Integrations_Manager, VAPT_Cron, add_action(), add_filter(), Elementor_Ajax_Handler, is_wp_error(), rgpost() (+6 more)
 
 ### Community 2 - "Community 2"
 Cohesion: 0.05
@@ -109,8 +106,8 @@ Cohesion: 0.08
 Nodes (25): Architecture Decision, code:block1 (X-Frame-Options: SAMEORIGIN), Executive Summary, Files to be Modified/Created, Final Status, Implementation Order, Phase 1: HIGH Priority (COMPLETED), Phase 2: MEDIUM Priority (COMPLETED) (+17 more)
 
 ### Community 7 - "Community 7"
-Cohesion: 0.1
-Nodes (8): VAPT_Input_Validator, Elementor_Ajax_Handler, sanitize_textarea_field(), WP_Error, wp_strip_all_tags(), WPCF7_Validation, WPForms, WPForms_Process
+Cohesion: 0.11
+Nodes (3): VAPT_Features, VAPT_Hardening, wp_die()
 
 ### Community 8 - "Community 8"
 Cohesion: 0.09
@@ -136,11 +133,11 @@ Nodes (13): 10. Sensitive File Protection (V#12 & V#13), 11. Input Validation (V
 Cohesion: 0.17
 Nodes (11): 1. Accessing the Interface, 2. Managing Hardening Features (VAPT Report), 3. Monitoring & Verification, 4. Security Audit Logs, 5. Domain Control (Superadmin Only), 6. Pre-Delivery Checklist, Feature Toggles, How to Validate Login Protection (V#1) (+3 more)
 
-### Community 19 - "Community 19"
-Cohesion: 0.2
+### Community 18 - "Community 18"
+Cohesion: 0.20
 Nodes (9): 1. Core Documentation Updates, 2. New Folder: `DevDocs`, 3. Verification, `ARCHITECTURE.md`, `DOCUMENTATION.md`, Plan: Update Plugin Documentation for v3.1.2 & Beyond, `README.md`, `README.txt` (Critical Update) (+1 more)
 
-### Community 20 - "Community 20"
+### Community 19 - "Community 19"
 Cohesion: 0.22
 Nodes (8): Added, Changed, Fixed, Infrastructure, Security, v3.2.0 - [Previous Version], v3.2.1 - 2026-05-23, Version History
 
@@ -156,85 +153,85 @@ Nodes (6): 1. Core Logic & Configuration (`vapt-security.php`), 2. Remote Manage
 Cohesion: 0.33
 Nodes (6): [1.0.0] - 2025-12-15, Added, Compatibility, Features, Performance, Security
 
-### Community 27 - "Community 27"
-Cohesion: 0.4
-Nodes (4): Access Requirements:, Configuration Generator, Domain Admin Access, VAPT Security - Superadmin Guide
-
-### Community 28 - "Community 28"
-Cohesion: 0.4
+### Community 24 - "Community 24"
+Cohesion: 0.40
 Nodes (4): Backend Enhancements (`vapt-security.php`), Enhance-Build Plan, UI Enhancements (`templates/admin-domain-control.php`), Verification
 
-### Community 31 - "Community 31"
-Cohesion: 0.5
-Nodes (4): Performance Improvements, Planned Improvements, Security Enhancements, [Unreleased]
+### Community 29 - "Community 29"
+Cohesion: 0.40
+Nodes (4): Access Requirements:, Configuration Generator, Domain Admin Access, VAPT Security - Superadmin Guide
 
-### Community 32 - "Community 32"
-Cohesion: 0.5
+### Community 30 - "Community 30"
+Cohesion: 0.50
 Nodes (4): Roadmap, Version 1.1.0 (Planned), Version 1.2.0 (Planned), Version 1.3.0 (Planned)
 
-### Community 33 - "Community 33"
-Cohesion: 0.67
-Nodes (3): [2.5.0] - 2025-12-18, Added, Changed
+### Community 31 - "Community 31"
+Cohesion: 0.50
+Nodes (4): Performance Improvements, Planned Improvements, Security Enhancements, [Unreleased]
 
 ### Community 34 - "Community 34"
 Cohesion: 0.67
-Nodes (3): [1.0.3] - 2025-12-15, Added, Changed
+Nodes (3): [1.0.1] - 2025-12-15, Changed, Fixed
 
 ### Community 35 - "Community 35"
 Cohesion: 0.67
-Nodes (3): [2.0.0] - 2025-12-18, Added, Changed
+Nodes (3): [1.0.2] - 2025-12-15, Added, Changed
 
 ### Community 36 - "Community 36"
 Cohesion: 0.67
-Nodes (3): [3.1.2] - 2026-05-20, Added, Changed
+Nodes (3): [1.0.3] - 2025-12-15, Added, Changed
 
 ### Community 37 - "Community 37"
 Cohesion: 0.67
-Nodes (3): [1.0.2] - 2025-12-15, Added, Changed
+Nodes (3): [1.0.5] - 2025-12-15, Added, Fixed
 
 ### Community 38 - "Community 38"
 Cohesion: 0.67
-Nodes (3): [3.1.4] - 2026-05-21, Added, Changed
+Nodes (3): [3.0.0] - 2026-05-20, Added, Changed
 
 ### Community 39 - "Community 39"
 Cohesion: 0.67
-Nodes (3): [3.1.5] - 2026-05-21, Added, Fixed
+Nodes (3): [3.1.0] - 2026-05-20, Added, Changed
 
 ### Community 40 - "Community 40"
 Cohesion: 0.67
-Nodes (3): [3.2.0] - 2026-05-22, Added, Fixed
+Nodes (3): [3.1.2] - 2026-05-20, Added, Changed
 
 ### Community 41 - "Community 41"
 Cohesion: 0.67
-Nodes (3): [1.0.1] - 2025-12-15, Changed, Fixed
+Nodes (3): [3.1.5] - 2026-05-21, Added, Fixed
 
 ### Community 42 - "Community 42"
 Cohesion: 0.67
-Nodes (3): [1.0.5] - 2025-12-15, Added, Fixed
+Nodes (3): [3.2.0] - 2026-05-22, Added, Fixed
 
 ### Community 43 - "Community 43"
 Cohesion: 0.67
-Nodes (3): [3.0.0] - 2026-05-20, Added, Changed
+Nodes (3): [2.5.0] - 2025-12-18, Added, Changed
 
 ### Community 44 - "Community 44"
 Cohesion: 0.67
-Nodes (3): [3.1.0] - 2026-05-20, Added, Changed
+Nodes (3): [2.0.0] - 2025-12-18, Added, Changed
 
 ### Community 45 - "Community 45"
+Cohesion: 0.67
+Nodes (3): [3.1.4] - 2026-05-21, Added, Changed
+
+### Community 46 - "Community 46"
 Cohesion: 0.67
 Nodes (3): [3.1.3] - 2026-05-20, Added, Changed
 
 ## Knowledge Gaps
 - **256 isolated node(s):** `WPForms_Process`, `code:mermaid (graph TD)`, `code:mermaid (graph TD)`, `Key Features:`, `code:mermaid (graph TD)` (+251 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **11 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **13 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `sanitize_text_field()` connect `Community 0` to `Community 18`, `Community 11`, `Community 15`, `Community 7`?**
+- **Why does `sanitize_text_field()` connect `Community 0` to `Community 1`, `Community 11`, `Community 15`, `Community 48`, `Community 20`?**
   _High betweenness centrality (0.047) - this node is a cross-community bridge._
-- **Why does `VAPT_Security` connect `Community 0` to `Community 1`, `Community 7`?**
+- **Why does `VAPT_Security` connect `Community 0` to `Community 7`?**
   _High betweenness centrality (0.044) - this node is a cross-community bridge._
 - **Why does `add_action()` connect `Community 1` to `Community 0`, `Community 7`?**
   _High betweenness centrality (0.012) - this node is a cross-community bridge._
