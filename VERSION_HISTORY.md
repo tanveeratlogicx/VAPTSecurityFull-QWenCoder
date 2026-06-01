@@ -1,6 +1,11 @@
-We need to add new version entry at top. Keep original markdown. So output file with new entry then rest.```markdown
+The user wants to prepend new version entry. Keep markdown structure. So add at top after "# Version History"? Probably after heading. The suggestion shows just adding entry then --- then existing content. We'll output full file with new entry at top.```markdown
 # Version History
 
+---
+## v3.4.2 - 2026-06-01
+
+### Added
+- Bumped version to 3.4.2 after continued development.
 ---
 ## v3.4.1 - 2026-06-01
 
@@ -15,7 +20,6 @@ We need to add new version entry at top. Keep original markdown. So output file 
 - **`.buildincl` Allowlist**: Explicit allowlist file controls exactly which files go into client builds. Replaces the fragile blocklist. Edit `.buildincl` to adjust without code changes.
 - **Duplicate Build Filename Prompt**: Modal asks Overwrite vs Save as New when a same-named build already exists in `releases/builds/`.
 - **Build Generation Loading Overlay**: Full-screen spinner overlay during client zip generation.
-
 ### Fixed
 - **Heartbeat silent failure**: `blocking => false` in `maybe_trigger_callback()` dropped requests on single-server local setups. Changed to `blocking => true` with response parsing and remote command processing.
 - **False "Build Generation Failed" toast**: Stale message copy shown on success. Now accurate.
@@ -26,7 +30,6 @@ We need to add new version entry at top. Keep original markdown. So output file 
 
 ### Changed
 - `vaptNotify.confirm()` extended with `onCancel`, `confirmLabel`, `cancelLabel` parameters.
-
 ### Infrastructure
 - Version bumped to `3.3.0` in:
   - Plugin header `Version:` in `vapt-security.php`
