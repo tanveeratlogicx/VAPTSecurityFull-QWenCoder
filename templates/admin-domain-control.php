@@ -832,7 +832,7 @@ $csv_names = [
                                 <tr>
                                     <th scope="row"><?php esc_html_e( 'Min PHP Version', 'vapt-security' ); ?></th>
                                     <td>
-                                        <input type="text" id="vapt-wl-php-version" class="regular-text" placeholder="8.3" value="8.3" style="width: 100%;">
+                                        <input type="text" id="vapt-wl-php-version" class="regular-text" placeholder="8.0" value="8.0" style="width: 100%;">
                                     </td>
                                 </tr>
                             </table>
@@ -958,7 +958,7 @@ $csv_names = [
                                                      data-company="<?php echo esc_attr($build['white_label']['company'] ?? ''); ?>"
                                                      data-desc="<?php echo esc_attr($build['white_label']['description'] ?? ''); ?>"
                                                      data-wp="<?php echo esc_attr($build['white_label']['requires_at_least'] ?? '5.6'); ?>"
-                                                     data-php="<?php echo esc_attr($build['white_label']['requires_php'] ?? '8.3'); ?>"
+                                                     data-php="<?php echo esc_attr($build['white_label']['requires_php'] ?? '8.0'); ?>"
                                                      data-tracking-mode="<?php echo esc_attr($build['tracking_mode'] ?? 'production'); ?>"
                                                      data-custom-url="<?php echo esc_attr($build['integrity_url'] ?? ''); ?>"
                                                      data-callback-test="<?php echo esc_attr( ! empty( $build['callback_test'] ) ? '1' : '0' ); ?>"

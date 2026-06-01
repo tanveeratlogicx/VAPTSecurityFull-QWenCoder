@@ -47,7 +47,7 @@ Comprehensive event tracking and analysis:
 ### Prerequisites
 
 - WordPress 6.3 or higher
-- PHP 8.3 or higher
+- PHP 8.0 or higher
 - MySQL 5.5.5 or higher
 
 ### Installation Steps

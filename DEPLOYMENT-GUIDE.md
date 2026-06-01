@@ -183,4 +183,4 @@ For issues with:
 
 **Last Updated:** 2025
 **Plugin Version:** 3.2.1
-**Compatible:** WordPress 6.3+, PHP 8.3+
+**Compatible:** WordPress 6.3+, PHP 8.0+

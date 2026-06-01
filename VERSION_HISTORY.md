@@ -1,6 +1,12 @@
 # Version History
 
 ---
+## v3.4.4 - 2026-06-01
+
+### Changed
+- Lower minimum PHP requirement from 8.3 to 8.0 (plugin header + build generator defaults).
+
+---
 ## v3.4.3 - 2026-06-01
 
 ### Fixed

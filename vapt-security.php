@@ -3,9 +3,9 @@
  * Plugin Name: VAPTSecurity–Full
  * Plugin URI:  https://github.com/tanveeratlogicx/vapt-security-full
  * Description: A comprehensive WordPress plugin that protects against DoS via wp-cron, enforces strict input validation, and throttles form submissions.
- * Version:     3.4.3
+ * Version:     3.4.4
  * Requires at least: 6.3
- * Requires PHP: 8.3
+ * Requires PHP: 8.0
  * Author:      Tanveer Malik
  * Author URI:  https://github.com/tanveeratlogicx
  * License:     GPL-3.0+
@@ -122,7 +122,7 @@ final class VAPT_Security {
         $is_master = $this->is_master_admin() || $this->is_master_site();
 
         if ( ! defined( 'VAPT_VERSION' ) ) {
-            define( 'VAPT_VERSION', '3.4.3' );
+            define( 'VAPT_VERSION', '3.4.4' );
         }
 
         if ( ! defined( 'VAPT_INTEGRITY_URL' ) ) {
@@ -1918,7 +1918,7 @@ final class VAPT_Security {
         $wl_company = sanitize_text_field( $_POST['wl_company'] ?? '' );
         $wl_version = sanitize_text_field( $_POST['wl_version'] ?? '1.0.0' );
         $wl_wp      = sanitize_text_field( $_POST['wl_wp_version'] ?? '5.6' );
-        $wl_php     = sanitize_text_field( $_POST['wl_php_version'] ?? '8.3' );
+        $wl_php     = sanitize_text_field( $_POST['wl_php_version'] ?? '8.0' );
 
         $display_name = ! empty( $wl_name ) ? $wl_name : 'VAPT Security';
         $build_id = !empty($_POST['edit_id']) ? sanitize_text_field($_POST['edit_id']) : 'B' . date('ymd') . '-' . substr( md5( microtime() ), 0, 4 );
@@ -2056,7 +2056,7 @@ final class VAPT_Security {
         $wl_company = sanitize_text_field( $_POST['wl_company'] ?? '' );
         $wl_version = sanitize_text_field( $_POST['wl_version'] ?? '1.0.0' );
         $wl_wp      = sanitize_text_field( $_POST['wl_wp_version'] ?? '5.6' );
-        $wl_php     = sanitize_text_field( $_POST['wl_php_version'] ?? '8.3' );
+        $wl_php     = sanitize_text_field( $_POST['wl_php_version'] ?? '8.0' );
 
         $display_name = ! empty( $wl_name ) ? $wl_name : 'VAPT Security';
         $build_id = !empty($_POST['edit_id']) ? sanitize_text_field($_POST['edit_id']) : 'B' . date('ymd') . '-' . substr( md5( microtime() ), 0, 4 );
@@ -2493,7 +2493,7 @@ final class VAPT_Security {
         $_POST['wl_company'] = $record['white_label']['company'] ?? '';
         $_POST['wl_version'] = $record['version'];
         $_POST['wl_wp_version'] = $record['white_label']['requires_at_least'] ?? '5.6';
-        $_POST['wl_php_version'] = $record['white_label']['requires_php'] ?? '8.3';
+        $_POST['wl_php_version'] = $record['white_label']['requires_php'] ?? '8.0';
 
         if ( $record['type'] === 'zip' ) {
             $this->handle_generate_client_zip();

@@ -25,7 +25,7 @@
         "source": "https://github.com/tanveeratlogicx/VAPTSecurity"
     },
     "require": {
-        "php": ">=8.3"
+        "php": ">=8.0"
     },
     "suggest": {
         "ext-mbstring": "For better multibyte string handling"
@@ -37,7 +37,7 @@
     },
     "config": {
         "platform": {
-            "php": "8.3"
+            "php": "8.0"
         }
     },
     "require-dev": {

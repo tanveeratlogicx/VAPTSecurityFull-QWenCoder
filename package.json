@@ -1,6 +1,6 @@
 {
   "name": "vapt-security",
-  "version": "3.4.3",
+  "version": "3.4.4",
   "description": "A comprehensive WordPress security plugin that protects against common VAPT issues including DoS attacks via wp-cron, lack of input validation, and rate limiting on form submissions.",
   "main": "index.js",
   "scripts": {

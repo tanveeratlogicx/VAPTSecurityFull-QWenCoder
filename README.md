@@ -2,7 +2,7 @@
 
 [![Version](https://img.shields.io/badge/version-3.2.1-blue.svg)](https://github.com/tanveeratlogicx/vapt-security-full)
 [![WordPress](https://img.shields.io/badge/WordPress-6.3+-blue.svg)](https://wordpress.org/)
-[![PHP](https://img.shields.io/badge/PHP-8.3+-blue.svg)](https://php.net/)
+[![PHP](https://img.shields.io/badge/PHP-8.0+-blue.svg)](https://php.net/)
 [![License](https://img.shields.io/badge/license-GPL--3.0+-blue.svg)](LICENSE)
 
 ## Overview
@@ -215,7 +215,7 @@ Access these endpoints to verify protection:
 
 ### Requirements
 - WordPress 6.3 or higher
-- PHP 8.3 or higher
+- PHP 8.0 or higher
 - MySQL 5.5.5 or higher
 
 ### Steps
