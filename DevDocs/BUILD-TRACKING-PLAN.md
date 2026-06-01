@@ -1,48 +1,107 @@
-# VAPT Build Tracking & Callback System Implementation Plan
+# Build Tracking & Callback System — Status Plan
 
-This plan implements a discreet "Phone Home" tracking system that monitors build activations, license status, and versioning across client domains, sending data back to `https://vaptsecure.net/vapts` and displaying it in a new **Build Tracking** tab on your Domain Admin page.
+**Plugin:** VAPTSecurityFull-QWenCoder  
+**Current Version:** 3.3.0  
+**Date:** 2026-05-25
 
-## 1. Core Logic & Configuration (`vapt-security.php`)
-- **Version Update**: Bump `VAPT_VERSION` to `3.2.1`.
-- **Discreet Callback Constant**: Define `VAPT_INTEGRITY_URL` defaulting to `https://vaptsecure.net/vapts`.
-- **AJAX Endpoint**: Implement `wp_ajax_nopriv_vapt_build_callback` to receive tracking data AND return remote commands (like license extensions).
-- **Build Generation Update**: Injects `build_id` and `VAPT_INTEGRITY_URL` into all payloads.
+---
 
-## 2. Remote Management & Command System
-- **Two-Way Heartbeat**:
-    - **Client Site**: Sends status (Build ID, Domain, IP, Activation Date, Expiry).
-    - **Master Server**: Returns "pending commands" (Extensions, Renewals, Suspensions).
-- **Tiered Expiry Notification System (Urgency Sequence)**:
-    - Implement a rule-based engine to trigger different levels of notices based on `License Type` and `Days Remaining`:
-        - **Standard/Pro (30-365 days)**: 
-            - *Level 1 (20 days out)*: "Friendly Reminder" (Blue/Info) - Suggests early renewal.
-            - *Level 2 (10 days out)*: "Attention Required" (Yellow/Warning) - Mentions upcoming protection loss.
-            - *Level 3 (5 days out)*: "Urgent Action Required" (Red/Error) - Strong urgency, direct link to renew.
-        - **Demo (15 days)**: 
-            - *Level 1 (10 days out)*: "Trial Ending Soon" (Yellow/Warning).
-            - *Level 2 (3 days out)*: "Final Notice" (Red/Error).
-        - **Trial (7 days)**: 
-            - *Single Alert (3 days out)*: "Immediate Action Required" (Red/Error).
-- **Multi-Channel Delivery**:
-    - **Admin Notices**: Styled with standard WordPress notice classes (`notice-info`, `notice-warning`, `notice-error`) but enhanced with custom CSS for maximum visibility.
-    - **HTML Emails**: Professional, branded emails matching the urgency level (Level 1: Calm/Blue, Level 3: Urgent/Red).
-- **Authoritative Tracking**: 
-    - Master server locks `initial_activation` date to prevent resetting the urgency sequence via re-installation.
+## What We Have Achieved
 
-## 3. UI Implementation (`templates/admin-domain-control.php`)
-- **New Tab**: Add "Build Tracking" to the Domain Admin navigation.
-- **Tracking Table**: 
-    - Create a professional table showing Build ID, Domain, Status (Online/Offline), Initial Install, Initial Activation, Last Heartbeat, License Info, and Version.
-    - **Remote Actions**: Add a "Manage" button/dropdown for each build with options to:
-        - **Extend License**: Adds another full term to the current expiry (e.g., +30 days for Standard, +365 for Pro) based on the build's license type.
-        - **Custom Term**: Manually set a specific expiry date or add a specific number of days for special cases.
-        - **Suspend Build**: Remote kill-switch to deactivate the plugin on the client site immediately.
-- **Notifications**: Master sends email to `tanmalik786@gmail.com` on first-time activation of any build.
+### Core Infrastructure
+- **Domain-locked config system** — generator produces `vapt-{domain}-locked-config.php` with `build_id`, `integrity_url`, `tracking_mode`, HMAC signature, license, and white-label metadata baked in.
+- **Build Generator UI** — Build Generator tab with two actions: Generate Config File (server-side only) and Generate Client Build (zip).
+- **`.buildincl` allowlist** — explicit file allowlist controls exactly what goes into client zips. No more accidental inclusion of dev docs, test files, or zip archives.
+- **Build History table** — tracks every generated build with ID, domain, type, version, license, dates, and actions (download, edit/reuse, export, suspend/resume, purge).
+- **Releases directory structure** — `releases/builds/` for zips, `releases/configurations/` for config files, `releases/logs/` for exported records.
 
-## 4. Security & Optimization
-- **Payload Protection**: Use `hash_hmac` with the existing integrity salt for all callback data.
-- **Async Processing**: Ensure client-side pings are non-blocking.
+### Callback / Heartbeat System
+- **Client-side heartbeat** (`maybe_trigger_callback`) — fires on every page load, throttled to 60 s (local) or 12 h (production). Sends `build_id`, domain, license state, version, and initial install time to the master.
+- **HMAC signing** — payload is `ksort`-ed before signing with `hash_hmac('sha256', json_encode($payload), $salt)`. Master verifies with `hash_equals()` before processing.
+- **Master-side receiver** (`handle_build_callback`) — records `last_seen`, domain, IP, license, version, and history per `build_id`. Returns pending remote commands.
+- **Remote commands** — master can push `EXTEND_LICENSE`, `SUSPEND` commands to client on next heartbeat.
+- **First activation notification** — email sent to superadmin on first ping from a new build.
+- **Blocking HTTP** — changed from `blocking: false` (silent failure on single-server local) to `blocking: true` with response parsing.
 
-## 5. Deployment & Testing
-- Test the remote command loop (Master pushes update -> Client pulls and applies).
-- Verify the 5-day expiry notice appears correctly on client sites.
+### Test Callback Button
+- **Per-row test button** on every zip build in the Build History table (🔵 network icon).
+- Fires `vapt_force_ping` AJAX with `build_id`, `integrity_url`, `tracking_mode` from the history record.
+- Falls back to `VAPT_INTEGRITY_URL` (production) when `integrity_url` is empty (older builds).
+- Inline result row expands below the build row: ✓ green / ⚠ yellow / ✗ red with HTTP status, URL, SSL state, and raw response body.
+- On success, throttle is cleared so the next natural heartbeat fires immediately.
+
+### Build Generation UX
+- **Loading overlay** — full-screen spinner during zip generation.
+- **Duplicate filename prompt** — modal asks Overwrite vs Save as New (timestamp-suffixed) when a same-named build exists.
+- **Accurate success/error messages** — no more false "Build Generation Failed" toasts.
+
+---
+
+## What Is Still Outstanding / Being Worked On
+
+### 1. Callback Not Reaching Master (Priority)
+**Status:** Partially fixed — `blocking: true` applied, HMAC signing corrected.  
+**Remaining:** Need to verify end-to-end on the actual client site (wptest) after deploying the regenerated config. The `vapt-vapttest-wptest-v1.0.1.zip` build uses `tracking_mode: local` pointing to `http://vaptsecure.local/wp-admin/admin-ajax.php`. Once installed on the wptest site, the Test Callback button on the master should confirm the round-trip works.
+
+**To verify:**
+1. Install `vapt-vapttest-wptest-v1.0.1.zip` on the wptest client site
+2. Click Test Callback on the master against that build — expect ✓ green
+3. Check Build Tracking tab — expect wptest to appear as ONLINE
+
+### 2. Three Legacy Config Files Still Not Regenerated
+**Status:** Outstanding (Task 3.6 from execution report).  
+`vapt-locked-config.php`, `vapt-vaptsecure-locked-config.php`, `vapt-hermasnet.com-locked-config.php` are all missing `build_id`, `integrity_url`, `tracking_mode`. Those client sites will never send a heartbeat until their configs are regenerated.
+
+**To do:** Regenerate each via Build Generator → Generate Config File with correct domain/white-label settings.
+
+### 3. Test Callback Button on Older Builds
+**Status:** Fixed in this session.  
+Older builds (pre-3.3.0) had empty `integrity_url` in history. PHP handler now falls back to `VAPT_INTEGRITY_URL` when `integrity_url` is empty, so the button works on all zip builds.
+
+### 4. Build Tracking Tab — Live Data
+**Status:** UI exists, data depends on heartbeats arriving.  
+Once callbacks are confirmed working (item 1 above), the tracking table will populate with real ONLINE/OFFLINE status, last seen times, and license info per build.
+
+### 5. Remote Command Delivery Verification
+**Status:** Code exists, untested end-to-end.  
+The `EXTEND_LICENSE` and `SUSPEND` commands are queued on the master and returned on the next heartbeat. Need a live round-trip to confirm the client processes them correctly.
+
+---
+
+## Architecture Summary
+
+```
+Master Site (vaptsecure.local)
+│
+├── Build Generator Tab
+│   ├── Generate Config File  →  releases/configurations/vapt-{domain}-locked-config.php
+│   └── Generate Client Build →  releases/builds/vapt-{slug}-{domain}-{version}.zip
+│                                 └── contains: vapt-security.php (white-labelled)
+│                                              + vapt-{domain}-locked-config.php
+│                                              + includes/, assets/, templates/, vendor/
+│
+├── Build History Table
+│   └── Per-row: Download | Edit | Export | Test Callback | Suspend | Purge
+│
+└── Build Tracking Tab
+    └── Per build_id: domain, IP, status, last seen, license, version
+
+Client Site (e.g. wptest)
+│
+└── vapt-security.php (white-labelled)
+    └── on every page load → maybe_trigger_callback()
+        ├── throttle check (60s local / 12h production)
+        ├── read locked config → build_id, integrity_url, tracking_mode
+        ├── build + sign payload (ksort + HMAC)
+        └── wp_remote_post(integrity_url) → master's handle_build_callback()
+            └── master records last_seen, returns pending commands
+```
+
+---
+
+## Version History of This Work
+
+| Version | Key Changes |
+|---------|-------------|
+| 3.2.1 | HMAC signing added, non-blocking ping (later reverted) |
+| 3.3.0 | Blocking ping, `.buildincl`, Test Callback button, duplicate prompt, loading overlay, parse error fix |

@@ -2,6 +2,25 @@
 
 All notable changes to the VAPT Security plugin will be documented in this file.
 
+## [3.3.0] - 2026-05-25
+
+### Added
+- **Test Callback Button**: New "Test Callback" button in the Build Tracking tab fires a real ping to the master server on demand and displays a full diagnostic panel — target URL, tracking mode, build ID, HTTP status, SSL verify state, and raw response body. Colour-coded result (green/yellow/red). On success, throttle is cleared so the next natural heartbeat fires immediately.
+- **`.buildincl` Allowlist**: Replaced the fragile blocklist approach for client build packaging with an explicit allowlist file (`.buildincl`). Only `vapt-security.php`, `uninstall.php`, `README.txt`, `USER_GUIDE.md`, `assets/`, `includes/`, `templates/`, and `vendor/autoload.php` + `vendor/composer/` are included. Edit `.buildincl` to add or remove files without touching code.
+- **Duplicate Build Filename Prompt**: If a build with the same filename already exists in `releases/builds/`, a modal now asks whether to **Overwrite** or **Save as New** (timestamp-suffixed) before writing.
+- **Build Generation Loading Overlay**: Full-screen dimmed overlay with spinner appears while the client zip is being generated, preventing double-clicks and giving clear visual feedback.
+
+### Fixed
+- **Heartbeat Not Reaching Master**: `maybe_trigger_callback()` was using `blocking => false`, which silently drops requests on single-server local setups where the originating PHP process holds the only available slot. Changed to `blocking => true` with proper response parsing and remote command processing.
+- **"Build Generation Failed" Toast on Success**: Stale error message copy was shown even when the build succeeded. Message now accurately reflects the outcome.
+- **`handle_force_ping` HMAC Mismatch**: Force ping was signing the payload without `ksort`, causing signature verification failures on the master. Fixed to match `maybe_trigger_callback()` signing order.
+- **`handle_force_ping` SSL**: `sslverify` was hardcoded `false`. Now driven by `tracking_mode` (same as the natural heartbeat).
+- **Parse Error / Critical Site Crash**: Orphaned code fragment (`'payload' => $payload` / `] );`) left behind from a partial replacement of `handle_force_ping` caused a PHP parse error that took the entire site down. Removed.
+- **Dirty Files in Client Build**: Previous blocklist approach was missing many dev/doc files, causing ZIPs, markdown docs, and test files to appear in client builds. Replaced with `.buildincl` allowlist.
+
+### Changed
+- `vaptNotify.confirm()` now accepts optional `onCancel`, `confirmLabel`, and `cancelLabel` parameters for flexible modal dialogs.
+
 ## [3.2.1] - 2026-05-22
 ### Changed
 - **PHP Version Requirement**: Raised minimum PHP version from 7.2.24 to 8.3+ for WordPress 7.x compatibility

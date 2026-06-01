@@ -3,7 +3,7 @@
  * Plugin Name: VAPT Security - Full
  * Plugin URI:  https://github.com/tanveeratlogicx/vapt-security-full
  * Description: A comprehensive WordPress plugin that protects against DoS via wp-cron, enforces strict input validation, and throttles form submissions.
- * Version:     3.2.1
+ * Version:     3.4.0
  * Requires at least: 6.3
  * Requires PHP: 8.3
  * Author:      Tanveer Malik
@@ -123,7 +123,7 @@ final class VAPT_Security {
         $is_master = $this->is_master_admin();
 
         if ( ! defined( 'VAPT_VERSION' ) ) {
-            define( 'VAPT_VERSION', '3.2.1' );
+            define( 'VAPT_VERSION', '3.4.0' );
         }
 
         if ( ! defined( 'VAPT_INTEGRITY_URL' ) ) {
@@ -225,6 +225,9 @@ final class VAPT_Security {
         add_action( 'wp_ajax_vapt_build_callback', [ $this, 'handle_build_callback' ] );
         add_action( 'wp_ajax_vapt_push_remote_command', [ $this, 'handle_push_remote_command' ] );
         add_action( 'wp_ajax_vapt_force_ping', [ $this, 'handle_force_ping' ] );
+        add_action( 'wp_ajax_vapt_set_callback_test', [ $this, 'handle_set_callback_test' ] );
+        add_action( 'wp_ajax_vapt_refresh_build_status', [ $this, 'handle_refresh_build_status' ] );
+        add_action( 'wp_ajax_vapt_get_tracking_table', [ $this, 'handle_get_tracking_table' ] );
 
         add_action( 'init', [ $this, 'initialize_security_logging' ] );
         add_action( 'vapt_cleanup_event', [ $this, 'cleanup_old_data' ] );
@@ -234,7 +237,15 @@ final class VAPT_Security {
 
         // Run domain lock check immediately on load to ensure white-labeling is active
         // But allow Master Admin to continue even if no lock file exists
-        if ( ! $this->enforce_domain_lock() && ! $this->is_master_admin() ) {
+        $domain_lock_ok = $this->enforce_domain_lock();
+        $is_master = $this->is_master_admin();
+        if ( ! $domain_lock_ok && ! $is_master ) {
+            $files = glob( plugin_dir_path( __FILE__ ) . 'vapt-*-locked-config.php*' );
+            // Only log when config files exist but lock still fails (real client-side problem)
+            if ( ! empty( $files ) ) {
+                $host = $_SERVER['HTTP_HOST'] ?? 'unknown';
+                error_log( 'VAPT DIAG: init() guard triggered. domain_lock_ok=' . ( $domain_lock_ok ? 'true' : 'false' ) . ' is_master=' . ( $is_master ? 'true' : 'false' ) . ' host=' . $host . ' files=' . implode( ',', $files ) );
+            }
             return; // STOP! No configuration found or invalid domain.
         }
         
@@ -251,6 +262,7 @@ final class VAPT_Security {
         // Callback and Notifications
         add_action( 'init', [ $this, 'maybe_trigger_callback' ] );
         add_action( 'admin_notices', [ $this, 'display_license_expiry_notices' ] );
+        add_action( 'admin_notices', [ $this, 'display_callback_test_notice' ] );
 
         // Ensure release directories exist
         $this->ensure_release_dirs();
@@ -275,11 +287,12 @@ final class VAPT_Security {
         // Migration: Move existing locked configs and ZIPs from root to releases/
         $root = plugin_dir_path( __FILE__ );
         
-        // Move Configs
+        // Move Configs — but skip .imported (already processed by enforce_domain_lock)
         $configs = glob( $root . 'vapt-*-locked-config.php*' );
         if ( ! empty( $configs ) ) {
             foreach ( $configs as $file ) {
                 $name = basename( $file );
+                if ( substr( $name, -9 ) === '.imported' ) continue;
                 @rename( $file, $base . 'configurations/' . $name );
             }
         }
@@ -1656,7 +1669,7 @@ final class VAPT_Security {
         $tracking_mode = sanitize_text_field( $_POST['tracking_mode'] ?? 'production' );
         $integrity_url = VAPT_INTEGRITY_URL;
         
-        if ( $tracking_mode === 'testing' ) {
+        if ( $tracking_mode === 'local' ) {
             $integrity_url = admin_url( 'admin-ajax.php' );
         } elseif ( $tracking_mode === 'custom' ) {
             $custom_url = esc_url_raw( $_POST['custom_url'] ?? '' );
@@ -1671,6 +1684,7 @@ final class VAPT_Security {
             'domain_type'    => $domain_type,
             'tracking_mode'  => $tracking_mode,
             'integrity_url'  => $integrity_url,
+            'callback_test'  => ! empty( $_POST['include_callback_test'] ),
             'license'        => [
                 'type'       => $lic_type,
                 'auto_renew' => $lic_renew,
@@ -1793,7 +1807,7 @@ final class VAPT_Security {
         $tracking_mode = sanitize_text_field( $_POST['tracking_mode'] ?? 'production' );
         $integrity_url = VAPT_INTEGRITY_URL;
         
-        if ( $tracking_mode === 'testing' ) {
+        if ( $tracking_mode === 'local' ) {
             $integrity_url = admin_url( 'admin-ajax.php' );
         } elseif ( $tracking_mode === 'custom' ) {
             $custom_url = esc_url_raw( $_POST['custom_url'] ?? '' );
@@ -1808,6 +1822,7 @@ final class VAPT_Security {
             'domain_type'    => $domain_type,
             'tracking_mode'  => $tracking_mode,
             'integrity_url'  => $integrity_url,
+            'callback_test'  => ! empty( $_POST['include_callback_test'] ),
             'license'        => [
                 'type'       => $lic_type,
                 'auto_renew' => $lic_renew,
@@ -1854,7 +1869,7 @@ final class VAPT_Security {
 \$vapt_locked_config_sig = '{$signature}';
 ";
 
-        // 2. Build Zip
+        // 2. Build Zip — use .buildincl allowlist
         $zip_file = tempnam( sys_get_temp_dir(), 'vapt_client_' );
         $zip = new ZipArchive();
         if ( $zip->open( $zip_file, ZipArchive::CREATE | ZipArchive::OVERWRITE ) !== TRUE ) {
@@ -1869,161 +1884,185 @@ final class VAPT_Security {
         $safe_domain = preg_replace( '/[^a-zA-Z0-9\-\.]/', '-', $domain_pattern );
         $safe_domain = trim( $safe_domain, '-' );
         $config_filename = "vapt-{$safe_domain}-locked-config.php";
-        
         $zip->addFromString( $folder . '/' . $config_filename, $config_content );
 
-        // Add Plugin Files
-        $plugin_path = untrailingslashit( plugin_dir_path( __FILE__ ) );
-        $files = new RecursiveIteratorIterator(
-            new RecursiveDirectoryIterator( $plugin_path, RecursiveDirectoryIterator::SKIP_DOTS ),
-            RecursiveIteratorIterator::LEAVES_ONLY
-        );
+        // Read .buildincl allowlist
+        $plugin_path  = untrailingslashit( plugin_dir_path( __FILE__ ) );
+        $buildincl    = $plugin_path . '/.buildincl';
+        $include_list = [];
 
-        $exclude_list = [
-            '.git', '.gitignore', '.github',
-            'ARCHITECTURE.md', 'CHANGELOG.md', 'DOCUMENTATION.md', 'FEATURES.md', 'VERSION_CONTROL.md', 'Project Layout.me', 'README.md', 'SUPERADMIN_GUIDE.md', 'Folder Structure.md',
-            'composer.json', 'composer.lock', 'package.json', 'package-lock.json', 'prompt.txt',
-            'test-config.php', 'test-vapt-features.php', 'vapt-config.php', 'vapt-config-sample.php',
-            'tests', 'bin', 'node_modules', 'DevDocs', 'LegacyZips', 'kilo', 'ReqDocs', 'releases',
-            'VAPTSecurity Initial.zip', 'VAPTSecurity v105.zip'
-        ];
-
-        foreach ( $files as $name => $file ) {
-            // Check for valid file info
-            if ( ! $file->isFile() ) continue;
-
-            $relative_path = substr( $file->getPathname(), strlen( $plugin_path ) + 1 );
-            // Normalize slashes
-            $relative_path = str_replace( '\\', '/', $relative_path );
-            
-            // Check Exclusions
-            $skip = false;
-            foreach ( $exclude_list as $exclude ) {
-                if ( strpos( $relative_path, $exclude ) === 0 || strpos( $relative_path, '/' . $exclude ) !== false ) {
-                    $skip = true;
-                    break;
-                }
+        if ( file_exists( $buildincl ) ) {
+            $lines = file( $buildincl, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES );
+            foreach ( $lines as $line ) {
+                $line = trim( $line );
+                if ( $line === '' || $line[0] === '#' ) continue;
+                $include_list[] = rtrim( $line, '/' );
             }
-            if ( $skip ) continue;
-            
-            // Don't include existing locked config if one somehow exists in dev
-            if ( strpos( $relative_path, '-locked-config.php' ) !== false ) continue;
+        }
 
-            // White Label Main Plugin File Header
-            if ( $relative_path === 'vapt-security.php' ) {
-                $main_content = file_get_contents( $file->getRealPath() );
-                
-                // 100% Safe Approach: Isolate the header block (first 1000 characters)
-                // This prevents the generator from accidentally matching its own source code
-                $header_end = strpos( $main_content, '*/' );
-                if ( $header_end !== false ) {
-                    $header_end += 2; // Include the closing tag
-                    $header = substr( $main_content, 0, $header_end );
-                    $rest   = substr( $main_content, $header_end );
+        // Fallback hardcoded allowlist if .buildincl is missing
+        if ( empty( $include_list ) ) {
+            $include_list = [
+                'vapt-security.php',
+                'uninstall.php',
+                'README.txt',
+                'USER_GUIDE.md',
+                'assets',
+                'includes',
+                'templates',
+                'vendor/autoload.php',
+                'vendor/composer',
+            ];
+        }
 
-                    if ( ! empty( $wl_name ) ) {
-                        $header = preg_replace( '/Plugin Name: .*/', 'Plugin Name: ' . $wl_name, $header );
-                    }
-                    if ( ! empty( $wl_author ) ) {
-                        $header = preg_replace( '/Author: .*/', 'Author: ' . $wl_author, $header );
-                    }
-                    if ( ! empty( $wl_desc ) ) {
-                        $header = preg_replace( '/Description: .*/', 'Description: ' . $wl_desc, $header );
-                    }
-                    if ( ! empty( $wl_version ) ) {
-                        $header = preg_replace( '/Version: .*/', 'Version: ' . $wl_version, $header );
-                    }
-                    if ( ! empty( $wl_wp ) ) {
-                        if ( strpos( $header, 'Requires at least:' ) !== false ) {
-                            $header = preg_replace( '/Requires at least: .*/', 'Requires at least: ' . $wl_wp, $header );
-                        } else {
-                            $header = str_replace( 'Version: ' . $wl_version, 'Version: ' . $wl_version . "\n * Requires at least: " . $wl_wp, $header );
+        // Expand allowlist entries into actual files
+        foreach ( $include_list as $entry ) {
+            $full_entry = $plugin_path . '/' . $entry;
+
+            if ( is_file( $full_entry ) ) {
+                // Single file entry
+                $relative_path = $entry;
+
+                // Skip any locked-config files
+                if ( strpos( $relative_path, '-locked-config.php' ) !== false ) continue;
+
+                // White-label main plugin file header
+                if ( $relative_path === 'vapt-security.php' ) {
+                    $main_content = file_get_contents( $full_entry );
+                    $header_end   = strpos( $main_content, '*/' );
+                    if ( $header_end !== false ) {
+                        $header_end += 2;
+                        $header = substr( $main_content, 0, $header_end );
+                        $rest   = substr( $main_content, $header_end );
+                        if ( ! empty( $wl_name ) )   $header = preg_replace( '/Plugin Name: .*/', 'Plugin Name: ' . $wl_name, $header );
+                        if ( ! empty( $wl_author ) )  $header = preg_replace( '/Author: .*/', 'Author: ' . $wl_author, $header );
+                        if ( ! empty( $wl_desc ) )    $header = preg_replace( '/Description: .*/', 'Description: ' . $wl_desc, $header );
+                        if ( ! empty( $wl_version ) ) $header = preg_replace( '/Version: .*/', 'Version: ' . $wl_version, $header );
+                        if ( ! empty( $wl_wp ) ) {
+                            if ( strpos( $header, 'Requires at least:' ) !== false ) {
+                                $header = preg_replace( '/Requires at least: .*/', 'Requires at least: ' . $wl_wp, $header );
+                            } else {
+                                $header = str_replace( 'Version: ' . $wl_version, 'Version: ' . $wl_version . "\n * Requires at least: " . $wl_wp, $header );
+                            }
                         }
-                    }
-                    if ( ! empty( $wl_php ) ) {
-                        if ( strpos( $header, 'Requires PHP:' ) !== false ) {
-                            $header = preg_replace( '/Requires PHP: .*/', 'Requires PHP: ' . $wl_php, $header );
-                        } else {
-                            $anchor = ( ! empty( $wl_wp ) ) ? 'Requires at least: ' . $wl_wp : 'Version: ' . $wl_version;
-                            $header = str_replace( $anchor, $anchor . "\n * Requires PHP: " . $wl_php, $header );
+                        if ( ! empty( $wl_php ) ) {
+                            if ( strpos( $header, 'Requires PHP:' ) !== false ) {
+                                $header = preg_replace( '/Requires PHP: .*/', 'Requires PHP: ' . $wl_php, $header );
+                            } else {
+                                $anchor = ( ! empty( $wl_wp ) ) ? 'Requires at least: ' . $wl_wp : 'Version: ' . $wl_version;
+                                $header = str_replace( $anchor, $anchor . "\n * Requires PHP: " . $wl_php, $header );
+                            }
                         }
+                        $main_content = $header . $rest;
                     }
-
-                    $main_content = $header . $rest;
+                    $zip->addFromString( $folder . '/' . $relative_path, $main_content );
+                    continue;
                 }
-                
-                $zip->addFromString( $folder . '/' . $relative_path, $main_content );
-                continue;
-            }
 
-            // White Label README.txt
-            if ( $relative_path === 'README.txt' ) {
-                $content = file_get_contents( $file->getRealPath() );
-                if ( ! empty( $wl_name ) ) {
-                    $content = preg_replace( '/=== .* ===/', '=== ' . $wl_name . ' ===', $content, 1 );
+                // White-label README.txt
+                if ( $relative_path === 'README.txt' ) {
+                    $content = file_get_contents( $full_entry );
+                    if ( ! empty( $wl_name ) ) $content = preg_replace( '/=== .* ===/', '=== ' . $wl_name . ' ===', $content, 1 );
+                    $content = str_replace( 'Contributors: tanveeratlogicx', 'Contributors: CosmicTechSol', $content );
+                    $content = preg_replace( '/Stable tag: .*/', 'Stable tag: ' . $wl_version, $content );
+                    $content = preg_replace( '/6\. \*\*Domain Control Features\*\*.*?License management\n/s', '', $content );
+                    $content = preg_replace( '/\* Added Domain Locked Configuration Generator.*?conditional submenu for Superadmin\n/s', '', $content );
+                    $content = preg_replace( '/\* Major release with Domain Control features.*?OTP authentication for superadmin\n/s', '', $content );
+                    $zip->addFromString( $folder . '/' . $relative_path, $content );
+                    continue;
                 }
-                $content = str_replace( 'Contributors: tanveeratlogicx', 'Contributors: CosmicTechSol', $content );
-                $content = preg_replace( '/Stable tag: .*/', 'Stable tag: ' . $wl_version, $content );
-                
-                // Remove Superadmin/Domain Control mentions from README.txt
-                $content = preg_replace( '/6\. \*\*Domain Control Features\*\*.*?License management\n/s', '', $content );
-                $content = preg_replace( '/\* Added Domain Locked Configuration Generator.*?conditional submenu for Superadmin\n/s', '', $content );
-                $content = preg_replace( '/\* Major release with Domain Control features.*?OTP authentication for superadmin\n/s', '', $content );
-                
-                $zip->addFromString( $folder . '/' . $relative_path, $content );
-                continue;
-            }
 
-            // White Label and Include USER_GUIDE.md
-            if ( $relative_path === 'USER_GUIDE.md' ) {
-                $content = file_get_contents( $file->getRealPath() );
-                if ( ! empty( $wl_name ) ) {
-                    $content = preg_replace( '/^# .*/m', '# ' . $wl_name . ' - User Guide', $content, 1 );
+                // White-label USER_GUIDE.md
+                if ( $relative_path === 'USER_GUIDE.md' ) {
+                    $content = file_get_contents( $full_entry );
+                    if ( ! empty( $wl_name ) ) $content = preg_replace( '/^# .*/m', '# ' . $wl_name . ' - User Guide', $content, 1 );
+                    $zip->addFromString( $folder . '/' . $relative_path, $content );
+                    continue;
                 }
-                
-                // Keep original filename as USER_GUIDE.md
-                $zip->addFromString( $folder . '/' . $relative_path, $content );
-                continue;
-            }
 
-            $zip->addFile( $file->getRealPath(), $folder . '/' . $relative_path );
+                $zip->addFile( $full_entry, $folder . '/' . $relative_path );
+
+            } elseif ( is_dir( $full_entry ) ) {
+                // Directory entry — recurse
+                $dir_files = new RecursiveIteratorIterator(
+                    new RecursiveDirectoryIterator( $full_entry, RecursiveDirectoryIterator::SKIP_DOTS ),
+                    RecursiveIteratorIterator::LEAVES_ONLY
+                );
+                foreach ( $dir_files as $dir_file ) {
+                    if ( ! $dir_file->isFile() ) continue;
+                    $rel = $entry . '/' . str_replace( '\\', '/', substr( $dir_file->getPathname(), strlen( $full_entry ) + 1 ) );
+                    if ( strpos( $rel, '-locked-config.php' ) !== false ) continue;
+                    $zip->addFile( $dir_file->getRealPath(), $folder . '/' . $rel );
+                }
+            }
         }
 
         $zip->close();
 
         // 3. Return Base64
-        if ( file_exists( $zip_file ) ) {
-            $data = file_get_contents( $zip_file );
-            unlink( $zip_file );
-            
-            // Sanitize domain for filename (replace dots with hyphens)
-            $filename_domain = str_replace( '.', '-', $safe_domain );
-            $filename_slug   = ! empty( $wl_slug ) ? $wl_slug : 'security';
-            
-            // Smart Version Handling for Filename (Avoid vv1.0.0)
-            $clean_version = ltrim( $wl_version, 'vV' );
-            $filename_version = 'v' . $clean_version;
-            
-            $filename = "vapt-{$filename_slug}-{$filename_domain}-{$filename_version}.zip";
-
-            // Save a copy to the server for history
-            $server_zip = plugin_dir_path( __FILE__ ) . 'releases/builds/' . $filename;
-            file_put_contents( $server_zip, $data );
-            
-            unlink( $zip_file );
-            
-            // Log to history
-            $payload['filename'] = $filename;
-            $this->add_build_to_history( $payload, 'zip', $build_id );
-
-            wp_send_json_success([
-                'message'  => __( 'Zip built successfully.', 'vapt-security' ),
-                'filename' => $filename,
-                'base64'   => base64_encode( $data )
-            ]);
-        } else {
-             wp_send_json_error( [ 'message' => __( 'Zip generation failed.', 'vapt-security' ) ] );
+        if ( ! file_exists( $zip_file ) ) {
+            wp_send_json_error( [ 'message' => __( 'Zip generation failed — temp file not found.', 'vapt-security' ) ] );
         }
+
+        $data = file_get_contents( $zip_file );
+        unlink( $zip_file ); // clean up temp file — only once
+
+        if ( $data === false || strlen( $data ) === 0 ) {
+            wp_send_json_error( [ 'message' => __( 'Zip generation failed — could not read temp file.', 'vapt-security' ) ] );
+        }
+
+        // Sanitize domain for filename (replace dots with hyphens)
+        $filename_domain  = str_replace( '.', '-', $safe_domain );
+        $filename_slug    = ! empty( $wl_slug ) ? $wl_slug : 'security';
+
+        // Smart Version Handling for Filename (Avoid vv1.0.0)
+        $clean_version    = ltrim( $wl_version, 'vV' );
+        $filename_version = 'v' . $clean_version;
+
+        $filename = "vapt-{$filename_slug}-{$filename_domain}-{$filename_version}.zip";
+
+        // Save a copy to the server for history
+        $server_zip    = plugin_dir_path( __FILE__ ) . 'releases/builds/' . $filename;
+        $file_existed  = file_exists( $server_zip );
+
+        // If caller explicitly confirmed overwrite, proceed. Otherwise flag it.
+        $confirmed_overwrite = ! empty( $_POST['confirm_overwrite'] );
+        if ( $file_existed && ! $confirmed_overwrite ) {
+            wp_send_json_success( [
+                'needs_confirm' => true,
+                'filename'      => $filename,
+                'message'       => sprintf(
+                    /* translators: %s: filename */
+                    __( 'A build named <strong>%s</strong> already exists. Overwrite it or save as a new file?', 'vapt-security' ),
+                    esc_html( $filename )
+                ),
+            ] );
+        }
+
+        // If user chose "Save as new", append a timestamp suffix
+        if ( ! empty( $_POST['save_as_new'] ) ) {
+            $filename = str_replace( '.zip', '-' . date( 'His' ) . '.zip', $filename );
+            $server_zip = plugin_dir_path( __FILE__ ) . 'releases/builds/' . $filename;
+        }
+
+        $bytes_written = file_put_contents( $server_zip, $data );
+
+        if ( $bytes_written === false ) {
+            error_log( 'VAPT Build Generator: failed to write server copy to ' . $server_zip );
+        }
+
+        // Log to history
+        $payload['filename'] = $filename;
+        $this->add_build_to_history( $payload, 'zip', $build_id );
+
+        $server_msg = ( $bytes_written !== false )
+            ? __( 'Build saved successfully.', 'vapt-security' )
+            : __( 'Build generated but could not be saved to server. Check folder permissions on releases/builds/.', 'vapt-security' );
+
+        wp_send_json_success([
+            'message'  => $server_msg,
+            'filename' => $filename,
+        ]);
     }
 
     /**
@@ -2048,6 +2087,9 @@ final class VAPT_Security {
             'expires'     => $payload['license']['expires'] ?? 0,
             'filename'    => $payload['filename'] ?? '',
             'white_label' => $payload['white_label'], // Store full WL for editing
+            'callback_test' => ! empty( $payload['callback_test'] ),
+            'auto_renew'  => ! empty( $payload['license']['auto_renew'] ),
+            'renewal_count' => ! empty( $payload['license']['renewal_count'] ) ? (int) $payload['license']['renewal_count'] : 0,
             'time'        => time()
         ];
 
@@ -2181,6 +2223,10 @@ final class VAPT_Security {
         $_POST['license_type'] = $record['license'];
         $_POST['edit_id'] = $record['id'];
         $_POST['include_settings'] = 1;
+        $_POST['include_callback_test'] = ! empty( $record['callback_test'] ) ? 1 : 0;
+        $_POST['tracking_mode'] = $record['tracking_mode'] ?? 'production';
+        $_POST['custom_url'] = $record['integrity_url'] ?? '';
+        $_POST['auto_renew'] = ! empty( $record['license']['auto_renew'] ) ? 1 : 0;
         
         $_POST['wl_name'] = $record['white_label']['name'] ?? '';
         $_POST['wl_slug'] = $record['white_label']['slug'] ?? '';
@@ -2489,7 +2535,7 @@ final class VAPT_Security {
             });
         }
         
-        if ( empty( $files ) ) {
+         if ( empty( $files ) ) {
             $legacy = plugin_dir_path( __FILE__ ) . 'vapt-locked-config.php';
             $legacy_imported = plugin_dir_path( __FILE__ ) . 'vapt-locked-config.php.imported';
             
@@ -2498,6 +2544,7 @@ final class VAPT_Security {
             } elseif ( file_exists( $legacy_imported ) ) {
                 $files = [ $legacy_imported ];
             } else {
+                error_log( 'VAPT DIAG: enforce_domain_lock — no config files found in plugin root. host=' . ( $_SERVER['HTTP_HOST'] ?? 'unknown' ) );
                 return false;
             }
         }
@@ -2517,6 +2564,7 @@ final class VAPT_Security {
         }
 
         if ( ! $vapt_locked_config_data || ! $vapt_locked_config_sig ) {
+            error_log( 'VAPT DIAG: enforce_domain_lock — config data or sig missing in file: ' . ( $files[0] ?? 'unknown' ) );
             return false;
         }
         
@@ -2530,6 +2578,7 @@ final class VAPT_Security {
 
         $data = json_decode( $vapt_locked_config_data, true );
         if ( ! $data || empty( $data['domain_pattern'] ) ) {
+            error_log( 'VAPT DIAG: enforce_domain_lock — JSON parse failed or no domain_pattern in: ' . ( $files[0] ?? 'unknown' ) );
             return false;
         }
 
@@ -2714,6 +2763,34 @@ final class VAPT_Security {
             $command_payload['type'] = 'SUSPEND';
         }
 
+        if ( $type === 'CHANGE_TYPE' ) {
+            $new_type = sanitize_text_field( $val );
+            $valid_types = [ 'trial', 'demo', 'standard', 'pro', 'developer' ];
+            if ( ! in_array( $new_type, $valid_types, true ) ) {
+                wp_send_json_error( [ 'message' => 'Invalid license type.' ] );
+            }
+
+            // Calculate new expiry based on license type
+            $term_days = [
+                'trial'     => 7,
+                'demo'      => 15,
+                'standard'  => 30,
+                'pro'       => 365,
+                'developer' => 365,
+            ];
+            $new_expiry = time() + ( $term_days[ $new_type ] * DAY_IN_SECONDS );
+
+            $command_payload['type'] = 'CHANGE_LICENSE_TYPE';
+            $command_payload['license_type'] = $new_type;
+            $command_payload['expiry'] = $new_expiry;
+
+            // Update local tracking immediately
+            $tracking[$build_id]['license']['type'] = $new_type;
+            $tracking[$build_id]['license']['expiry'] = $new_expiry;
+            $tracking[$build_id]['license']['status'] = 'active';
+            update_option( 'vapt_build_tracking', $tracking );
+        }
+
         $commands[$build_id][] = $command_payload;
         update_option( 'vapt_pending_commands', $commands );
 
@@ -2725,57 +2802,265 @@ final class VAPT_Security {
      */
     public function handle_force_ping() {
         check_ajax_referer( 'vapt_locked_config', 'nonce' );
-        
-        $config = $this->get_locked_config_data();
-        if ( ! $config ) {
-            wp_send_json_error( [ 'message' => 'No locked config found' ] );
+
+        // Accept explicit params passed from the Build History UI (master-side test)
+        // OR fall back to reading the local locked config (client-side use)
+        $passed_build_id      = sanitize_text_field( $_POST['build_id'] ?? '' );
+        $passed_integrity_url = esc_url_raw( $_POST['integrity_url'] ?? '' );
+        $passed_tracking_mode = sanitize_text_field( $_POST['tracking_mode'] ?? '' );
+
+        if ( ! empty( $passed_build_id ) ) {
+            // Master-side test: params supplied directly from the Build History row
+            $build_id      = $passed_build_id;
+            $integrity_url = ! empty( $passed_integrity_url ) ? $passed_integrity_url : VAPT_INTEGRITY_URL;
+            $tracking_mode = $passed_tracking_mode ?: 'production';
+        } else {
+            // Client-side use: read from local locked config
+            $config = $this->get_locked_config_data();
+            if ( ! $config ) {
+                wp_send_json_error( [ 'message' => 'No locked config found on this installation.' ] );
+            }
+            if ( empty( $config['build_id'] ) ) {
+                wp_send_json_error( [ 'message' => 'Locked config is missing build_id — regenerate the config file.' ] );
+            }
+            $build_id      = $config['build_id'];
+            $integrity_url = ! empty( $config['integrity_url'] ) ? $config['integrity_url'] : VAPT_INTEGRITY_URL;
+            $tracking_mode = $config['tracking_mode'] ?? 'production';
         }
-        
-        if ( empty( $config['build_id'] ) ) {
-            wp_send_json_error( [ 'message' => 'Config missing build_id' ] );
-        }
-        
-        $integrity_url = ! empty( $config['integrity_url'] ) ? $config['integrity_url'] : VAPT_INTEGRITY_URL;
-        
+
         if ( ! get_option( 'vapt_initial_install_time' ) ) {
             update_option( 'vapt_initial_install_time', time() );
         }
+
+        // Authoritative first_activation check — use Master's value if available
+        $initial_install = get_option( 'vapt_initial_install_time' );
+        if ( $this->has_locked_config() ) {
+            $config = $this->get_locked_config_data();
+            if ( $config && ! empty( $config['build_id'] ) ) {
+                $master_tracking = get_option( 'vapt_build_tracking', [] );
+                if ( isset( $master_tracking[ $config['build_id'] ]['first_activation'] ) ) {
+                    $initial_install = $master_tracking[ $config['build_id'] ]['first_activation'];
+                }
+            }
+        }
         
+        // Check license status FIRST to allow auto-renewal to occur
+        $license_status = VAPT_License::is_valid() ? 'active' : 'expired';
+        // Now get the (potentially renewed) license data
         $license = VAPT_License::get_license();
         $payload = [
             'action'          => 'vapt_build_callback',
-            'build_id'        => $config['build_id'],
+            'build_id'        => $build_id,
             'domain'          => $_SERVER['HTTP_HOST'] ?? '',
             'license_type'    => $license['type'] ?? '',
             'license_expiry'  => $license['expires'] ?? 0,
-            'license_status'  => VAPT_License::is_valid() ? 'active' : 'expired',
+            'license_status'  => $license_status,
             'version'         => VAPT_VERSION,
-            'initial_install' => get_option( 'vapt_initial_install_time' )
+            'initial_install' => $initial_install,
+            'renewal_count'   => ! empty( $license['renewal_count'] ) ? (int) $license['renewal_count'] : 0
         ];
-        
+
+        // Must ksort before signing — same as maybe_trigger_callback
         $salt = 'VAPT_LOCKED_CONFIG_INTEGRITY_SALT_v2';
+        ksort( $payload );
+        $payload = array_map( 'strval', $payload );
+        $sslverify = $tracking_mode !== 'local';
         $payload['sig'] = hash_hmac( 'sha256', json_encode( $payload ), $salt );
-        
+
         $response = wp_remote_post( $integrity_url, [
             'body'      => $payload,
             'timeout'   => 15,
             'blocking'  => true,
-            'sslverify' => false
+            'sslverify' => $sslverify,
         ] );
-        
+
         if ( is_wp_error( $response ) ) {
-            wp_send_json_error( [ 'message' => $response->get_error_message() ] );
+            wp_send_json_error( [
+                'message'       => $response->get_error_message(),
+                'url'           => $integrity_url,
+                'tracking_mode' => $tracking_mode,
+                'build_id'      => $build_id,
+                'sslverify'     => $sslverify,
+            ] );
         }
-        
-        $status = wp_remote_retrieve_response_code( $response );
-        $body = wp_remote_retrieve_body( $response );
-        
+
+        $status  = wp_remote_retrieve_response_code( $response );
+        $body    = wp_remote_retrieve_body( $response );
+        $decoded = json_decode( $body, true );
+        $success = ( $status === 200 && ! empty( $decoded['success'] ) );
+
+        // Reset throttle so next natural ping fires immediately
+        if ( $success ) {
+            delete_option( 'vapt_last_integrity_ping' );
+        }
+
         wp_send_json_success( [
-            'status' => $status,
-            'body' => $body,
-            'url' => $integrity_url,
-            'payload' => $payload
+            'ok'            => $success,
+            'status'        => $status,
+            'body'          => $body,
+            'url'           => $integrity_url,
+            'tracking_mode' => $tracking_mode,
+            'build_id'      => $build_id,
+            'sslverify'     => $sslverify,
+            'payload_sent'  => $payload,
         ] );
+    }
+
+    /**
+     * Toggle the callback test diagnostic notice on/off.
+     */
+    public function handle_set_callback_test() {
+        check_ajax_referer( 'vapt_locked_config', 'nonce' );
+        $enabled = ! empty( $_POST['enabled'] );
+        update_option( 'vapt_show_callback_test', $enabled );
+        wp_send_json_success( [ 'enabled' => $enabled ] );
+    }
+
+    /**
+     * Handle refresh/ping build status request (Master Server Side)
+     * Queues a FORCE_CHECKIN command for one or more builds
+     */
+    public function handle_refresh_build_status() {
+        check_ajax_referer( 'vapt_locked_config', 'nonce' );
+        if ( ! $this->is_master_admin() ) wp_send_json_error( [ 'message' => 'Unauthorized' ] );
+
+        $build_ids_raw = sanitize_text_field( $_POST['build_ids'] ?? '' );
+        if ( empty( $build_ids_raw ) ) {
+            wp_send_json_error( [ 'message' => 'No build IDs provided' ] );
+        }
+
+        $build_ids = array_map( 'trim', explode( ',', $build_ids_raw ) );
+        $tracking = get_option( 'vapt_build_tracking', [] );
+        $commands = get_option( 'vapt_pending_commands', [] );
+        $queued = [];
+        $invalid = [];
+
+        foreach ( $build_ids as $bid ) {
+            if ( empty( $bid ) ) continue;
+            if ( ! isset( $tracking[ $bid ] ) ) {
+                $invalid[] = $bid;
+                continue;
+            }
+            if ( ! isset( $commands[ $bid ] ) ) $commands[ $bid ] = [];
+            $commands[ $bid ][] = [ 'type' => 'FORCE_CHECKIN' ];
+            $queued[] = $bid;
+        }
+
+        if ( ! empty( $queued ) ) {
+            update_option( 'vapt_pending_commands', $commands );
+        }
+
+        $message = sprintf( '%d build(s) queued for refresh.', count( $queued ) );
+        if ( ! empty( $invalid ) ) {
+            $message .= ' Invalid: ' . implode( ', ', $invalid );
+        }
+
+        wp_send_json_success( [
+            'message' => $message,
+            'queued'  => $queued,
+            'invalid' => $invalid,
+        ] );
+    }
+
+    /**
+     * Return fresh tracking table HTML (Master Server Side)
+     */
+    public function handle_get_tracking_table() {
+        check_ajax_referer( 'vapt_locked_config', 'nonce' );
+        if ( ! $this->is_master_admin() ) wp_send_json_error( [ 'message' => 'Unauthorized' ] );
+
+        $tracking = get_option( 'vapt_build_tracking', [] );
+        $build_history = get_option( 'vapt_build_history', [] );
+        $build_versions = [];
+        $build_names = [];
+        foreach ( $build_history as $b ) {
+            $build_versions[ $b['id'] ] = $b['version'] ?? '';
+            $build_names[ $b['id'] ] = $b['name'] ?? '';
+        }
+
+        ob_start();
+        if ( empty( $tracking ) ) : ?>
+            <tr><td colspan="14" style="text-align:center; padding: 40px; color: #999;"><?php esc_html_e( 'No active tracking data received yet.', 'vapt-security' ); ?></td></tr>
+        <?php else :
+            $row_num = 0;
+            foreach ( array_reverse( $tracking ) as $bid => $t ) :
+                $row_num++;
+                $is_online = ( time() - $t['last_seen'] < 24 * HOUR_IN_SECONDS );
+                $datetime_format = get_option( 'date_format' ) . ' ' . get_option( 'time_format' );
+                $install_date = ! empty( $t['initial_install'] ) ? date_i18n( $datetime_format, $t['initial_install'] ) : 'N/A';
+                $activation_date = date_i18n( $datetime_format, $t['first_activation'] );
+                $expiry_date = ! empty( $t['license']['expiry'] ) ? date_i18n( $datetime_format, $t['license']['expiry'] ) : 'Never';
+                $build_version = $build_versions[ $bid ] ?? $t['version'] ?? '';
+                $build_label = $build_names[ $bid ] ?? '';
+                $row_bg = $row_num % 2 === 0 ? ' background: #f8f9fa;' : '';
+        ?>
+            <tr style="<?php echo $row_bg; ?>">
+                <td style="text-align:center; color: #888;"><?php echo $row_num; ?></td>
+                <td style="text-align:center;"><input type="checkbox" class="vapt-tracking-checkbox" value="<?php echo esc_attr( $bid ); ?>"></td>
+                <td>
+                    <span class="vapt-build-id"><?php echo esc_html( $bid ); ?></span>
+                    <?php if ( ! empty( $build_version ) ) : ?>
+                        <span style="color: #999; font-size: 10px;"> / v<?php echo esc_html( $build_version ); ?></span>
+                    <?php endif; ?>
+                </td>
+                <td style="font-size: 11px;">
+                    <?php echo ! empty( $build_label ) ? esc_html( $build_label ) : '<span style="color: #999;">—</span>'; ?>
+                </td>
+                <td>
+                    <strong><?php echo esc_html( $t['domain'] ); ?></strong>
+                    <?php if ( ! empty( $t['ip'] ) ) : ?>
+                        <span style="color: #999; font-weight: 400;"> / <?php echo esc_html( $t['ip'] ); ?></span>
+                    <?php endif; ?>
+                </td>
+                <td>
+                    <span class="badge" style="background: #2271b1; color:#fff; padding: 2px 8px; border-radius:10px; font-size:10px;">
+                        <?php echo esc_html( strtoupper( $t['license']['type'] ) ); ?>
+                    </span>
+                    <span style="font-size: 10px; color: <?php echo ( $t['license']['status'] === 'active' ) ? '#008a20' : '#d63638'; ?>; margin-left: 4px;">
+                        <?php echo esc_html( $t['license']['status'] ); ?>
+                    </span>
+                </td>
+                <td>
+                    <span class="vapt-feature-status" style="background: <?php echo $is_online ? '#edfaef' : '#fcf0f1'; ?>; color: <?php echo $is_online ? '#008a20' : '#d63638'; ?>;">
+                        <?php echo $is_online ? 'ONLINE' : 'OFFLINE'; ?>
+                    </span>
+                </td>
+                <td style="font-size: 11px;">
+                    <?php echo $install_date; ?>
+                </td>
+                <td style="font-size: 11px;">
+                    <?php echo $activation_date; ?>
+                </td>
+                <td style="font-size: 11px; color: #666; width: 80px;">
+                    <?php echo $t['license']['auto_renew'] ? esc_html__( 'Yes', 'vapt-security' ) : esc_html__( 'No', 'vapt-security' ); ?>
+                </td>
+                <td style="font-size: 11px; color: #666; width: 90px;">
+                    <?php echo esc_html( $t['license']['renewal_count'] ?? 0 ); ?>
+                </td>
+                <td style="font-size: 11px;">
+                    <?php echo $expiry_date; ?>
+                </td>
+                <td style="font-size: 11px;">
+                    <?php echo human_time_diff( $t['last_seen'], time() ); ?> ago
+                </td>
+                <td>
+                    <button type="button" class="button button-small vapt-refresh-build"
+                        data-id="<?php echo esc_attr( $bid ); ?>"
+                        title="<?php esc_attr_e( 'Refresh Status', 'vapt-security' ); ?>">
+                        <span class="dashicons dashicons-update" style="font-size: 16px; margin-top: 3px;"></span>
+                    </button>
+                    <button type="button" class="button button-small vapt-manage-build"
+                        data-id="<?php echo esc_attr( $bid ); ?>"
+                        data-domain="<?php echo esc_attr( $t['domain'] ); ?>"
+                        data-expiry="<?php echo esc_attr( $t['license']['expiry'] ); ?>"
+                        data-type="<?php echo esc_attr( $t['license']['type'] ); ?>"
+                        title="<?php esc_attr_e( 'Manage Deployment', 'vapt-security' ); ?>">
+                        <span class="dashicons dashicons-admin-settings" style="font-size: 16px; margin-top: 3px;"></span>
+                    </button>
+                </td>
+            </tr>
+        <?php endforeach; endif;
+        wp_send_json_success( [ 'html' => ob_get_clean() ] );
     }
 
     /**
@@ -2789,6 +3074,7 @@ final class VAPT_Security {
         $salt = 'VAPT_LOCKED_CONFIG_INTEGRITY_SALT_v2';
         $payload_for_sig = $_POST;
         unset( $payload_for_sig['sig'] );
+        ksort( $payload_for_sig );
         $expected_sig = hash_hmac( 'sha256', json_encode( $payload_for_sig ), $salt );
         if ( ! hash_equals( $expected_sig, $sig ) ) {
             wp_send_json_error( [ 'message' => 'Invalid signature' ] );
@@ -2814,7 +3100,8 @@ final class VAPT_Security {
         $tracking[$build_id]['license']   = [
             'type'   => sanitize_text_field( $_POST['license_type'] ?? '' ),
             'expiry' => (int) ($_POST['license_expiry'] ?? 0),
-            'status' => sanitize_text_field( $_POST['license_status'] ?? '' )
+            'status' => sanitize_text_field( $_POST['license_status'] ?? '' ),
+            'renewal_count' => isset( $_POST['renewal_count'] ) ? (int) $_POST['renewal_count'] : 0
         ];
         $tracking[$build_id]['version']   = sanitize_text_field( $_POST['version'] ?? '' );
 
@@ -2876,6 +3163,9 @@ public function maybe_trigger_callback() {
 
         $config = $this->get_locked_config_data();
         if ( ! $config ) {
+            $plugin_path = plugin_dir_path( __FILE__ );
+            $files_found = glob( $plugin_path . 'vapt-*-locked-config.php*' );
+            error_log( 'VAPT Diagnostic: maybe_trigger_callback — get_locked_config_data() returned false. Files found by glob: ' . ( $files_found ? implode( ', ', $files_found ) : 'NONE' ) );
             return;
         }
         if ( empty( $config['build_id'] ) ) {
@@ -2884,19 +3174,23 @@ public function maybe_trigger_callback() {
         }
 
         $integrity_url = ! empty( $config['integrity_url'] ) ? $config['integrity_url'] : VAPT_INTEGRITY_URL;
+        error_log( 'VAPT Diagnostic: maybe_trigger_callback — proceeding. build_id=' . $config['build_id'] . ', url=' . $integrity_url . ', mode=' . ( $config['tracking_mode'] ?? 'production' ) );
 
         // Record Initial Install if not set
         if ( ! get_option( 'vapt_initial_install_time' ) ) {
             update_option( 'vapt_initial_install_time', time() );
         }
-
+        
         // Authoritative first_activation check - use Master's value if available
         $initial_install = get_option( 'vapt_initial_install_time' );
         $master_tracking = get_option( 'vapt_build_tracking', [] );
         if ( isset( $master_tracking[ $config['build_id'] ]['first_activation'] ) ) {
             $initial_install = $master_tracking[ $config['build_id'] ]['first_activation'];
         }
-
+        
+        // Check license status FIRST to allow auto-renewal to occur
+        $license_status = VAPT_License::is_valid() ? 'active' : 'expired';
+        // Now get the (potentially renewed) license data
         $license = VAPT_License::get_license();
         $payload = [
             'action'          => 'vapt_build_callback',
@@ -2904,24 +3198,41 @@ public function maybe_trigger_callback() {
             'domain'          => $_SERVER['HTTP_HOST'] ?? '',
             'license_type'    => $license['type'] ?? '',
             'license_expiry'  => $license['expires'] ?? 0,
-            'license_status'  => VAPT_License::is_valid() ? 'active' : 'expired',
+            'license_status'  => $license_status,
             'version'         => VAPT_VERSION,
-            'initial_install' => $initial_install
+            'initial_install' => $initial_install,
+            'renewal_count'   => ! empty( $license['renewal_count'] ) ? (int) $license['renewal_count'] : 0
         ];
 
         $salt = 'VAPT_LOCKED_CONFIG_INTEGRITY_SALT_v2';
+        ksort( $payload );
+        $payload = array_map( 'strval', $payload );
         $payload['sig'] = hash_hmac( 'sha256', json_encode( $payload ), $salt );
 
         $response = wp_remote_post( $integrity_url, [
             'body'      => $payload,
             'timeout'   => 15,
-            'blocking'  => false,
-            'sslverify' => false // Local environments often have SSL issues
+            'blocking'  => true,
+            'sslverify' => ( $config['tracking_mode'] ?? 'production' ) !== 'local',
         ] );
 
         if ( is_wp_error( $response ) ) {
             error_log( 'VAPT Tracking Error (' . $integrity_url . '): ' . $response->get_error_message() );
             return;
+        }
+
+        $response_code = wp_remote_retrieve_response_code( $response );
+        $response_body = wp_remote_retrieve_body( $response );
+        $decoded       = json_decode( $response_body, true );
+
+        if ( $response_code !== 200 || empty( $decoded['success'] ) ) {
+            error_log( 'VAPT Tracking Error (' . $integrity_url . '): HTTP ' . $response_code . ' — ' . $response_body );
+            return;
+        }
+
+        // Process any remote commands returned by master
+        if ( ! empty( $decoded['data']['commands'] ) ) {
+            $this->process_remote_commands( $decoded['data']['commands'] );
         }
 
         update_option( 'vapt_last_integrity_ping', time() );
@@ -2949,6 +3260,23 @@ public function maybe_trigger_callback() {
                     }
                     deactivate_plugins( plugin_basename( __FILE__ ) );
                     wp_die( 'Your VAPT Security license has been suspended by the provider.', 'License Suspended' );
+                    break;
+                case 'FORCE_CHECKIN':
+                    // Immediately send heartbeat to master
+                    $this->maybe_trigger_callback();
+                    break;
+                case 'CHANGE_LICENSE_TYPE':
+                    $new_type = sanitize_text_field( $cmd['license_type'] ?? '' );
+                    $new_expiry = (int) ( $cmd['expiry'] ?? 0 );
+                    $license = VAPT_License::get_license();
+                    if ( $license && ! empty( $new_type ) ) {
+                        $license['type'] = $new_type;
+                        if ( $new_expiry > 0 ) {
+                            $license['expires'] = $new_expiry;
+                        }
+                        update_option( 'vapt_license', $license );
+                        $this->send_license_notification_email('extended', $new_expiry);
+                    }
                     break;
             }
         }
@@ -3007,6 +3335,93 @@ public function maybe_trigger_callback() {
                 set_transient( $stage_key, 1, 7 * DAY_IN_SECONDS );
             }
         }
+    }
+
+    /**
+     * Display callback test diagnostic notice on the vapt-security admin page (client sites only).
+     * Only shown when the locked config has callback_test = true.
+     */
+    public function display_callback_test_notice() {
+        // Show on all admin pages (client site only)
+        if ( ! $this->has_locked_config() ) return;
+
+        $config = $this->get_locked_config_data();
+        if ( empty( $config['callback_test'] ) ) return;
+
+        $build_id  = $config['build_id'] ?? 'N/A';
+        $ping_url  = ! empty( $config['integrity_url'] ) ? $config['integrity_url'] : VAPT_INTEGRITY_URL;
+        $ping_mode = $config['tracking_mode'] ?? 'production';
+        $nonce     = wp_create_nonce( 'vapt_locked_config' );
+        $ajax_url  = admin_url( 'admin-ajax.php' );
+        ?>
+        <div id="vapt-callback-test-notice" class="notice notice-warning" style="padding: 12px 16px;">
+            <div style="display:flex; align-items:flex-start; gap:14px; flex-wrap:wrap;">
+                <span class="dashicons dashicons-networking" style="color:#996800; font-size:20px; margin-top:2px; flex-shrink:0;"></span>
+                <div style="flex:1; min-width:200px;">
+                    <strong><?php esc_html_e( 'Callback Test Active', 'vapt-security' ); ?></strong><br>
+                    <span style="font-size:12px; color:#646970;">
+                        <?php esc_html_e( 'Build ID:', 'vapt-security' ); ?> <code><?php echo esc_html( $build_id ); ?></code>
+                        &nbsp;&middot;&nbsp;
+                        <?php esc_html_e( 'Target:', 'vapt-security' ); ?> <code><?php echo esc_html( $ping_url ); ?></code>
+                        &nbsp;&middot;&nbsp;
+                        <?php esc_html_e( 'Mode:', 'vapt-security' ); ?> <code><?php echo esc_html( $ping_mode ); ?></code>
+                    </span>
+                    <div id="vapt-ctn-result" style="display:none; margin-top:8px; padding:8px 10px; border-radius:4px; font-size:12px; background:#fff; border:1px solid #e0e0e0;">
+                        <span id="vapt-ctn-icon" style="margin-right:5px; font-weight:700;"></span>
+                        <strong id="vapt-ctn-title"></strong>
+                        <span id="vapt-ctn-meta" style="color:#646970; margin-left:8px; font-size:11px;"></span>
+                        <pre id="vapt-ctn-body" style="display:none; margin:5px 0 0; padding:5px 8px; background:#f8f9fa; border:1px solid #e0e0e0; border-radius:3px; font-size:11px; max-height:80px; overflow:auto; white-space:pre-wrap; word-break:break-all;"></pre>
+                    </div>
+                </div>
+                <div style="display:flex; gap:8px; flex-shrink:0; margin-top:2px;">
+                    <button type="button" id="vapt-ctn-ping-btn" class="button button-secondary">
+                        <span class="dashicons dashicons-networking" style="margin-top:3px; font-size:16px; width:16px; height:16px; line-height:16px;"></span>
+                        <?php esc_html_e( 'Test Callback to Master', 'vapt-security' ); ?>
+                    </button>
+                    <button type="button" class="notice-dismiss" id="vapt-ctn-dismiss-btn" style="position:static; padding:0 8px; height:30px; line-height:30px; font-size:12px;" title="<?php esc_attr_e( 'Dismiss for this session', 'vapt-security' ); ?>"></button>
+                </div>
+            </div>
+        </div>
+        <script>
+        jQuery(document).ready(function($) {
+            $('#vapt-ctn-dismiss-btn').click(function() {
+                $('#vapt-callback-test-notice').slideUp(200);
+            });
+            $('#vapt-ctn-ping-btn').click(function() {
+                var btn = $(this);
+                btn.prop('disabled', true).text('<?php echo esc_js( __( 'Testing...', 'vapt-security' ) ); ?>');
+                $.post('<?php echo esc_js( $ajax_url ); ?>', {
+                    action: 'vapt_force_ping',
+                    nonce:  '<?php echo esc_js( $nonce ); ?>'
+                }, function(r) {
+                    btn.prop('disabled', false).html('<span class="dashicons dashicons-networking" style="margin-top:3px;font-size:16px;width:16px;height:16px;line-height:16px;"></span> <?php echo esc_js( __( 'Test Callback to Master', 'vapt-security' ) ); ?>');
+                    var d = r.data || {};
+                    var rawBody = d.body || '';
+                    try { rawBody = JSON.stringify(JSON.parse(rawBody), null, 2); } catch(e) {}
+                    var metaStr = 'HTTP ' + (d.status || '?') + ' | SSL: ' + (d.sslverify ? 'on' : 'off');
+                    if (r.success && d.ok) {
+                        $('#vapt-ctn-result').css('border-left', '3px solid #00a32a');
+                        $('#vapt-ctn-icon').text('[OK]');
+                        $('#vapt-ctn-title').text('<?php echo esc_js( __( 'Master acknowledged the ping.', 'vapt-security' ) ); ?>');
+                    } else if (r.success && !d.ok) {
+                        $('#vapt-ctn-result').css('border-left', '3px solid #dba617');
+                        $('#vapt-ctn-icon').text('[WARN]');
+                        $('#vapt-ctn-title').text('<?php echo esc_js( __( 'Reached master but got unexpected response.', 'vapt-security' ) ); ?>');
+                    } else {
+                        $('#vapt-ctn-result').css('border-left', '3px solid #d63638');
+                        $('#vapt-ctn-icon').text('[FAIL]');
+                        $('#vapt-ctn-title').text(d.message || '<?php echo esc_js( __( 'Connection failed.', 'vapt-security' ) ); ?>');
+                    }
+                    $('#vapt-ctn-meta').text(metaStr);
+                    if (rawBody) { $('#vapt-ctn-body').text(rawBody).show(); }
+                    $('#vapt-ctn-result').slideDown(200);
+                }).fail(function() {
+                    btn.prop('disabled', false).html('<span class="dashicons dashicons-networking" style="margin-top:3px;font-size:16px;width:16px;height:16px;line-height:16px;"></span> <?php echo esc_js( __( 'Test Callback to Master', 'vapt-security' ) ); ?>');
+                });
+            });
+        });
+        </script>
+        <?php
     }
 
     /**

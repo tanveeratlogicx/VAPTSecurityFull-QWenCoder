@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
+         bootstrap="tests/bootstrap-stubs.php"
+         colors="true"
+         stopOnFailure="false">
+
+    <testsuites>
+        <testsuite name="Bug Condition Exploration">
+            <file>tests/BugConditionExplorationTest.php</file>
+        </testsuite>
+        <testsuite name="Preservation Property Tests">
+            <file>tests/PreservationPropertyTest.php</file>
+        </testsuite>
+    </testsuites>
+
+</phpunit>

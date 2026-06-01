@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 // Superadmin Domain Control Page
 // Check transient auth
 $user_id = get_current_user_id();
@@ -318,6 +318,54 @@ $csv_names = [
     }
     .vapt-notice-close:hover { color: #1d2327; }
 
+    /* Build Generation Loading Overlay */
+    #vapt-build-loading-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.55);
+        z-index: 200000;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 20px;
+        backdrop-filter: blur(3px);
+    }
+    #vapt-build-loading-overlay .vapt-spinner-box {
+        background: #fff;
+        border-radius: 10px;
+        padding: 36px 48px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 18px;
+        box-shadow: 0 20px 50px rgba(0,0,0,0.3);
+        min-width: 260px;
+        text-align: center;
+    }
+    #vapt-build-loading-overlay .vapt-spinner-ring {
+        width: 52px;
+        height: 52px;
+        border: 5px solid #e0e7ef;
+        border-top-color: #2271b1;
+        border-radius: 50%;
+        animation: vapt-spin 0.8s linear infinite;
+    }
+    @keyframes vapt-spin {
+        to { transform: rotate(360deg); }
+    }
+    #vapt-build-loading-overlay .vapt-spinner-title {
+        font-size: 16px;
+        font-weight: 700;
+        color: #1d2327;
+        margin: 0;
+    }
+    #vapt-build-loading-overlay .vapt-spinner-sub {
+        font-size: 12px;
+        color: #646970;
+        margin: 0;
+    }
+
     /* Custom Confirm Modal */
     .vapt-modal-overlay {
         position: fixed;
@@ -334,17 +382,175 @@ $csv_names = [
     }
     .vapt-modal {
         background: #fff;
-        border-radius: 8px;
-        width: 450px;
+        border-radius: 12px;
+        width: 480px;
         max-width: 90%;
-        padding: 25px;
-        box-shadow: 0 20px 40px rgba(0,0,0,0.25);
+        box-shadow: 0 25px 60px rgba(0,0,0,0.3);
+        overflow: hidden;
     }
-    .vapt-modal-header h2 { margin-top: 0; font-size: 18px; color: #1d2327; }
-    .vapt-modal-body { margin: 15px 0 25px 0; font-size: 14px; color: #50575e; line-height: 1.5; }
-    .vapt-modal-footer { display: flex; justify-content: flex-end; gap: 12px; }
+    .vapt-modal-header {
+        background: linear-gradient(135deg, #1d2327 0%, #2c3338 100%);
+        padding: 20px 24px;
+        color: #fff;
+        position: relative;
+    }
+    .vapt-modal-header h2 {
+        margin: 0;
+        font-size: 18px;
+        font-weight: 600;
+        color: #fff;
+    }
+    .vapt-modal-header p {
+        margin: 6px 0 0 0;
+        font-size: 13px;
+        color: rgba(255,255,255,0.7);
+    }
+    .vapt-modal-header .vapt-modal-build-badge {
+        display: inline-block;
+        background: rgba(255,255,255,0.15);
+        padding: 3px 10px;
+        border-radius: 4px;
+        font-family: monospace;
+        font-size: 12px;
+        margin-top: 8px;
+    }
+    .vapt-modal-close {
+        position: absolute;
+        top: 16px;
+        right: 16px;
+        background: rgba(255,255,255,0.1);
+        border: none;
+        color: #fff;
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 18px;
+        line-height: 1;
+        transition: background 0.2s;
+    }
+    .vapt-modal-close:hover {
+        background: rgba(255,255,255,0.2);
+    }
+    .vapt-modal-body {
+        padding: 24px;
+    }
+    .vapt-modal-section {
+        margin-bottom: 20px;
+    }
+    .vapt-modal-section:last-child {
+        margin-bottom: 0;
+    }
+    .vapt-modal-section-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin: 0 0 14px 0;
+        font-size: 13px;
+        font-weight: 600;
+        color: #1d2327;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    .vapt-modal-section-title .dashicons {
+        font-size: 16px;
+        width: 16px;
+        height: 16px;
+    }
+    .vapt-modal-actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+    .vapt-modal-actions .button {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 14px;
+        font-size: 13px;
+        border-radius: 6px;
+        transition: all 0.2s;
+    }
+    .vapt-modal-actions .button .dashicons {
+        font-size: 14px;
+        width: 14px;
+        height: 14px;
+    }
+    .vapt-modal-actions .button:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    .vapt-modal-custom-row {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        margin-top: 12px;
+        padding-top: 12px;
+        border-top: 1px solid #f0f0f1;
+    }
+    .vapt-modal-custom-row input[type="date"] {
+        flex: 1;
+        max-width: 180px;
+    }
+    .vapt-modal-description {
+        margin: 8px 0 0 0;
+        font-size: 12px;
+        color: #787c82;
+        font-style: italic;
+    }
+    .vapt-modal-danger-zone {
+        background: #fef2f2;
+        border: 1px solid #fecaca;
+        border-radius: 8px;
+        padding: 16px;
+    }
+    .vapt-modal-danger-zone .vapt-modal-section-title {
+        color: #b91c1c;
+    }
+    .vapt-modal-danger-zone .vapt-modal-section-title .dashicons {
+        color: #dc2626;
+    }
+    .vapt-modal-danger-zone .button {
+        background: #fff;
+        border-color: #dc2626;
+        color: #dc2626;
+    }
+    .vapt-modal-danger-zone .button:hover {
+        background: #dc2626;
+        color: #fff;
+    }
+    .vapt-modal-footer {
+        background: #f8f9fa;
+        padding: 16px 24px;
+        display: flex;
+        justify-content: flex-end;
+        border-top: 1px solid #e5e5e5;
+    }
+    .vapt-spin {
+        animation: vapt-spin-anim 1s linear infinite;
+    }
+    @keyframes vapt-spin-anim {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+    }
+    #vapt-tab-tracking .vapt-history-table td,
+    #vapt-tab-tracking .vapt-history-table th {
+        padding: 6px 5px;
+    }
 </style>
 <div id="vapt-notice-container"></div>
+
+<!-- Build Generation Loading Overlay -->
+<div id="vapt-build-loading-overlay" style="display:none;">
+    <div class="vapt-spinner-box">
+        <div class="vapt-spinner-ring"></div>
+        <p class="vapt-spinner-title"><?php esc_html_e( 'Generating Client Buildâ€¦', 'vapt-security' ); ?></p>
+        <p class="vapt-spinner-sub"><?php esc_html_e( 'Packaging plugin files. This may take a few seconds.', 'vapt-security' ); ?></p>
+    </div>
+</div>
 <div class="wrap vapt-domain-admin-wrap">
     <h1>
         <?php esc_html_e( 'VAPT Security - Domain Admin', 'vapt-security' ); ?><small style="font-size: 11px; color: #a2aab2; font-weight: 500; margin-left: 4px; vertical-align: baseline;">v<?php echo esc_html( VAPT_VERSION ); ?></small>
@@ -406,7 +612,8 @@ $csv_names = [
         ];
     ?>
         <!-- Verified Superadmin UI -->
-        
+
+
         <div class="vapt-tabs-nav">
             <a href="#vapt-tab-features" class="vapt-tab-link active" data-tab="features"><?php esc_html_e( 'Domain Features', 'vapt-security' ); ?></a>
             <a href="#vapt-tab-generator" class="vapt-tab-link" data-tab="generator"><?php esc_html_e( 'Build Generator', 'vapt-security' ); ?></a>
@@ -548,7 +755,7 @@ $csv_names = [
                                     <td>
                                         <select id="vapt-lock-tracking-mode" style="width: 100%;">
                                             <option value="production" <?php selected( ! $this->is_local_environment() ); ?>><?php esc_html_e( 'Production (vaptsecure.net)', 'vapt-security' ); ?></option>
-                                            <option value="testing" <?php selected( $this->is_local_environment() ); ?>><?php esc_html_e( 'Testing (vaptsecure.local)', 'vapt-security' ); ?></option>
+                                            <option value="local" <?php selected( $this->is_local_environment() ); ?>><?php esc_html_e( 'This Install (local master)', 'vapt-security' ); ?></option>
                                             <option value="custom"><?php esc_html_e( 'Custom URL', 'vapt-security' ); ?></option>
                                         </select>
                                         <p class="description" style="font-size: 11px; margin-top: 5px;">
@@ -632,11 +839,18 @@ $csv_names = [
                         </div>
                     </div>
 
-                    <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #eee; display: flex; gap: 10px; align-items: center;">
+                    <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #eee; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
                         <button type="button" id="vapt-generate-locked-config" class="button button-primary" style="height: 40px; padding: 0 20px;"><?php esc_html_e( 'Generate Config File', 'vapt-security' ); ?></button>
                         <button type="button" id="vapt-generate-client-zip" class="button button-secondary" style="height: 40px; padding: 0 20px;">
                             <?php esc_html_e( 'Generate Client Build', 'vapt-security' ); ?>
                         </button>
+                        <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:#50575e; cursor:pointer; margin-left:6px;">
+                            <label class="switch" style="margin:0;">
+                                <input type="checkbox" id="vapt-include-callback-test">
+                                <span class="slider round"></span>
+                            </label>
+                            <?php esc_html_e( 'Include Callback Test', 'vapt-security' ); ?>
+                        </label>
                         <div id="vapt-generate-msg" style="flex-grow: 1; font-weight: 500;"></div>
                     </div>
 
@@ -658,18 +872,20 @@ $csv_names = [
                         </div>
                         <table class="vapt-history-table" id="vapt-history-table">
                             <thead>
-                                    <tr>
-                                        <th style="width: 30px;"><input type="checkbox" id="vapt-select-all-builds"></th>
-                                        <th><?php esc_html_e( 'Build ID', 'vapt-security' ); ?></th>
-                                        <th><?php esc_html_e( 'Domain', 'vapt-security' ); ?></th>
-                                        <th><?php esc_html_e( 'Type', 'vapt-security' ); ?></th>
-                                        <th><?php esc_html_e( 'Plugin Name', 'vapt-security' ); ?></th>
-                                        <th><?php esc_html_e( 'Version', 'vapt-security' ); ?></th>
-                                        <th><?php esc_html_e( 'License', 'vapt-security' ); ?></th>
-                                        <th><?php esc_html_e( 'Date', 'vapt-security' ); ?></th>
-                                        <th><?php esc_html_e( 'Expires', 'vapt-security' ); ?></th>
-                                        <th><?php esc_html_e( 'Actions', 'vapt-security' ); ?></th>
-                                    </tr>
+                                     <tr>
+                                         <th style="width: 30px;"><input type="checkbox" id="vapt-select-all-builds"></th>
+                                         <th><?php esc_html_e( 'Build ID', 'vapt-security' ); ?></th>
+                                         <th><?php esc_html_e( 'Domain', 'vapt-security' ); ?></th>
+                                         <th style="font-size: 11px; text-transform: capitalize; color: #666;"><?php esc_html_e( 'Type', 'vapt-security' ); ?></th>
+                                         <th><?php esc_html_e( 'Plugin Name', 'vapt-security' ); ?></th>
+                                         <th><?php esc_html_e( 'Version', 'vapt-security' ); ?></th>
+                                         <th><span class="badge" style="background: #2271b1; color: #fff; padding: 2px 8px; border-radius: 10px; font-size: 10px;"><?php esc_html_e( 'License', 'vapt-security' ); ?></span></th>
+                                         <th style="font-size: 11px; color: #666; width: 80px;"><?php esc_html_e( 'Auto-Renew', 'vapt-security' ); ?></th>
+                                         <th style="font-size: 11px; color: #666; width: 90px;"><?php esc_html_e( 'Terms Renewed', 'vapt-security' ); ?></th>
+                                         <th style="font-size: 11px; color: #666;"><?php esc_html_e( 'Date', 'vapt-security' ); ?></th>
+                                         <th style="font-size: 11px; color: #666;"><?php esc_html_e( 'Expires', 'vapt-security' ); ?></th>
+                                         <th><?php esc_html_e( 'Actions', 'vapt-security' ); ?></th>
+                                     </tr>
                             </thead>
                             <tbody>
                                 <?php 
@@ -701,21 +917,26 @@ $csv_names = [
                                         <tr class="<?php echo (isset($build['status']) && $build['status'] === 'suspended') ? 'vapt-row-suspended' : ''; ?>">
                                             <td><input type="checkbox" class="vapt-build-checkbox" value="<?php echo esc_attr( $build['id'] ); ?>"></td>
                                             <td><span class="vapt-build-id"><?php echo esc_html( $build['id'] ); ?></span></td>
-                                            <td><?php echo esc_html( $build['domain'] ); ?></td>
-                                            <td style="font-size: 11px; text-transform: capitalize; color: #666;"><?php echo esc_html( $build['domain_type'] ?? 'standard' ); ?></td>
-                                            <td><?php echo esc_html( $build['name'] ); ?></td>
-                                            <td><?php echo esc_html( $build['version'] ); ?></td>
-                                            <td><span class="badge" style="background: #2271b1; color: #fff; padding: 2px 8px; border-radius: 10px; font-size: 10px;"><?php echo esc_html( strtoupper($build['license']) ); ?></span></td>
-                                            <td style="font-size: 11px; color: #666;"><?php echo esc_html( date_i18n( get_option( 'date_format' ), $build['time'] ) ); ?></td>
-                                            <td style="font-size: 11px; color: #666;">
-                                                <?php 
-                                                    if ( empty($build['expires']) || $build['license'] === 'developer' ) {
-                                                        echo esc_html__( 'Never', 'vapt-security' );
-                                                    } else {
-                                                        echo esc_html( date_i18n( get_option( 'date_format' ), $build['expires'] ) );
-                                                    }
-                                                ?>
-                                            </td>
+                                             <td><?php echo esc_html( $build['domain'] ); ?></td>
+                                             <td style="font-size: 11px; text-transform: capitalize; color: #666;"><?php echo esc_html( $build['domain_type'] ?? 'standard' ); ?></td>
+                                             <td><?php echo esc_html( $build['name'] ); ?></td>
+                                             <td><?php echo esc_html( $build['version'] ); ?></td>
+                                             <td><span class="badge" style="background: #2271b1; color: #fff; padding: 2px 8px; border-radius: 10px; font-size: 10px;"><?php echo esc_html( strtoupper($build['license']) ); ?></span></td>
+                                             <td style="font-size: 11px; color: #666; width: 80px;">
+                                                 <?php echo $build['auto_renew'] ? esc_html__( 'Yes', 'vapt-security' ) : esc_html__( 'No', 'vapt-security' ); ?>
+                                             </td>
+                                             <td style="font-size: 11px; color: #666; width: 90px;">
+                                                 <?php echo esc_html( $build['renewal_count'] ?? 0 ); ?>
+                                             </td>
+                                             <td style="font-size: 11px; color: #666;">
+                                                 <?php 
+                                                     if ( empty($build['expires']) || $build['license'] === 'developer' ) {
+                                                         echo esc_html__( 'Never', 'vapt-security' );
+                                                     } else {
+                                                         echo esc_html( date_i18n( get_option( 'date_format' ), $build['expires'] ) );
+                                                     }
+                                                 ?>
+                                             </td>
                                             <td style="display: flex; gap: 5px; align-items: center;">
                                                 <?php 
                                                 $is_suspended = (isset($build['status']) && $build['status'] === 'suspended');
@@ -727,19 +948,22 @@ $csv_names = [
                                                     </a>
                                                 <?php endif; ?>
                                                 <button type="button" class="button button-small vapt-edit-build<?php echo $disabled_class; ?>" 
-                                                    data-id="<?php echo esc_attr($build['id']); ?>" 
-                                                    data-domain="<?php echo esc_attr($build['domain']); ?>"
-                                                    data-domain-type="<?php echo esc_attr($build['domain_type'] ?? 'standard'); ?>"
-                                                    data-license-type="<?php echo esc_attr($build['license']); ?>"
-                                                    data-name="<?php echo esc_attr($build['name']); ?>"
-                                                    data-version="<?php echo esc_attr($build['version']); ?>"
-                                                    data-author="<?php echo esc_attr($build['white_label']['author'] ?? ''); ?>"
-                                                    data-company="<?php echo esc_attr($build['white_label']['company'] ?? ''); ?>"
-                                                    data-desc="<?php echo esc_attr($build['white_label']['description'] ?? ''); ?>"
-                                                    data-wp="<?php echo esc_attr($build['white_label']['requires_at_least'] ?? '5.6'); ?>"
-                                                    data-php="<?php echo esc_attr($build['white_label']['requires_php'] ?? '8.3'); ?>"
-                                                    data-tracking-mode="<?php echo esc_attr($build['tracking_mode'] ?? 'production'); ?>"
-                                                    data-custom-url="<?php echo esc_attr($build['integrity_url'] ?? ''); ?>"
+                                                     data-id="<?php echo esc_attr($build['id']); ?>" 
+                                                     data-domain="<?php echo esc_attr($build['domain']); ?>"
+                                                     data-domain-type="<?php echo esc_attr($build['domain_type'] ?? 'standard'); ?>"
+                                                     data-license-type="<?php echo esc_attr($build['license']); ?>"
+                                                     data-name="<?php echo esc_attr($build['name']); ?>"
+                                                     data-version="<?php echo esc_attr($build['version']); ?>"
+                                                     data-author="<?php echo esc_attr($build['white_label']['author'] ?? ''); ?>"
+                                                     data-company="<?php echo esc_attr($build['white_label']['company'] ?? ''); ?>"
+                                                     data-desc="<?php echo esc_attr($build['white_label']['description'] ?? ''); ?>"
+                                                     data-wp="<?php echo esc_attr($build['white_label']['requires_at_least'] ?? '5.6'); ?>"
+                                                     data-php="<?php echo esc_attr($build['white_label']['requires_php'] ?? '8.3'); ?>"
+                                                     data-tracking-mode="<?php echo esc_attr($build['tracking_mode'] ?? 'production'); ?>"
+                                                     data-custom-url="<?php echo esc_attr($build['integrity_url'] ?? ''); ?>"
+                                                     data-callback-test="<?php echo esc_attr( ! empty( $build['callback_test'] ) ? '1' : '0' ); ?>"
+                                                     data-auto-renew="<?php echo esc_attr( ! empty( $build['auto_renew'] ) ? '1' : '0' ); ?>"
+                                                     data-renewal-count="<?php echo esc_attr( $build['renewal_count'] ?? 0 ); ?>"
                                                     title="<?php esc_attr_e( 'Edit/Reuse settings', 'vapt-security' ); ?>" style="padding: 0 6px;">
                                                     <span class="dashicons dashicons-edit" style="font-size: 16px; width: 16px; height: 16px; line-height: 16px; margin-top: 3px;"></span>
                                                 </button>
@@ -749,7 +973,6 @@ $csv_names = [
                                                     title="<?php esc_attr_e( 'Export Record', 'vapt-security' ); ?>" style="padding: 0 6px;">
                                                     <span class="dashicons dashicons-upload" style="font-size: 16px; width: 16px; height: 16px; line-height: 16px; margin-top: 3px;"></span>
                                                 </button>
-
                                                 <div class="vapt-action-group" style="display: flex; gap: 2px; border-left: 1px solid #eee; padding-left: 5px; margin-left: 2px;">
                                                     <?php if ( $is_suspended ) : ?>
                                                         <button type="button" class="button button-small vapt-suspend-build" 
@@ -777,8 +1000,7 @@ $csv_names = [
                                                 </div>
                                             </td>
                                         </tr>
-                                    <?php endforeach;
-                                endif; ?>
+                                    <?php endforeach; endif; ?>
                             </tbody>
                         </table>
                     </div>
@@ -795,59 +1017,133 @@ $csv_names = [
                         <p class="description"><?php esc_html_e( 'Real-time tracking of generated builds across client domains.', 'vapt-security' ); ?></p>
                     </div>
                 </div>
-                
+
+                <!-- Callback Test Result Panel -->
+                <div id="vapt-callback-result" style="display:none; margin-bottom: 20px; border-radius: 6px; overflow: hidden; border: 1px solid #e0e0e0; font-size: 13px;">
+                    <div id="vapt-callback-result-header" style="padding: 12px 16px; font-weight: 700; display:flex; align-items:center; gap:8px;">
+                        <span id="vapt-callback-result-icon" style="font-size:18px;"></span>
+                        <span id="vapt-callback-result-title"></span>
+                    </div>
+                    <div style="padding: 14px 16px; background: #fafafa; border-top: 1px solid #e0e0e0;">
+                        <table style="width:100%; border-collapse:collapse; font-size:12px; font-family:monospace;">
+                            <tr><td style="padding:3px 12px 3px 0; color:#646970; white-space:nowrap; font-family:sans-serif;"><?php esc_html_e( 'Target URL', 'vapt-security' ); ?></td><td id="vcr-url" style="padding:3px 0; word-break:break-all;"></td></tr>
+                            <tr><td style="padding:3px 12px 3px 0; color:#646970; white-space:nowrap; font-family:sans-serif;"><?php esc_html_e( 'Tracking Mode', 'vapt-security' ); ?></td><td id="vcr-mode" style="padding:3px 0;"></td></tr>
+                            <tr><td style="padding:3px 12px 3px 0; color:#646970; white-space:nowrap; font-family:sans-serif;"><?php esc_html_e( 'Build ID', 'vapt-security' ); ?></td><td id="vcr-build-id" style="padding:3px 0;"></td></tr>
+                            <tr><td style="padding:3px 12px 3px 0; color:#646970; white-space:nowrap; font-family:sans-serif;"><?php esc_html_e( 'HTTP Status', 'vapt-security' ); ?></td><td id="vcr-status" style="padding:3px 0;"></td></tr>
+                            <tr><td style="padding:3px 12px 3px 0; color:#646970; white-space:nowrap; font-family:sans-serif;"><?php esc_html_e( 'SSL Verify', 'vapt-security' ); ?></td><td id="vcr-ssl" style="padding:3px 0;"></td></tr>
+                        </table>
+                        <div style="margin-top:10px;">
+                            <div style="font-size:11px; color:#646970; margin-bottom:4px; font-family:sans-serif;"><?php esc_html_e( 'Raw Response', 'vapt-security' ); ?></div>
+                            <pre id="vcr-body" style="margin:0; padding:8px; background:#fff; border:1px solid #e0e0e0; border-radius:4px; font-size:11px; max-height:120px; overflow:auto; white-space:pre-wrap; word-break:break-all;"></pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="margin-bottom: 10px;">
+                    <button id="vapt-ping-selected" class="button" disabled>
+                        <span class="dashicons dashicons-update" style="margin-top:4px;"></span> <?php esc_html_e( 'Ping Selected', 'vapt-security' ); ?>
+                    </button>
+                </div>
+
                 <table class="vapt-history-table" style="margin-top: 20px;">
                     <thead>
                         <tr>
-                            <th><?php esc_html_e( 'Build ID', 'vapt-security' ); ?></th>
-                            <th><?php esc_html_e( 'Domain / IP', 'vapt-security' ); ?></th>
-                            <th><?php esc_html_e( 'Status', 'vapt-security' ); ?></th>
-                            <th><?php esc_html_e( 'Install / Activation', 'vapt-security' ); ?></th>
-                            <th><?php esc_html_e( 'Last Seen', 'vapt-security' ); ?></th>
-                            <th><?php esc_html_e( 'License / Version', 'vapt-security' ); ?></th>
-                            <th><?php esc_html_e( 'Actions', 'vapt-security' ); ?></th>
+                             <th style="width: 20px;"><?php esc_html_e( '#', 'vapt-security' ); ?></th>
+                             <th style="width: 20px;"><input type="checkbox" id="vapt-select-all-tracking"></th>
+                             <th><?php esc_html_e( 'Build ID', 'vapt-security' ); ?></th>
+                             <th><?php esc_html_e( 'Plugin Name', 'vapt-security' ); ?></th>
+                             <th><?php esc_html_e( 'Domain / IP', 'vapt-security' ); ?></th>
+                             <th><?php esc_html_e( 'License', 'vapt-security' ); ?></th>
+                             <th><?php esc_html_e( 'Status', 'vapt-security' ); ?></th>
+                             <th><?php esc_html_e( 'Install', 'vapt-security' ); ?></th>
+                             <th><?php esc_html_e( 'Activation', 'vapt-security' ); ?></th>
+                             <th><?php esc_html_e( 'Auto-Renew', 'vapt-security' ); ?></th>
+                             <th><?php esc_html_e( 'Terms Renewed', 'vapt-security' ); ?></th>
+                             <th><?php esc_html_e( 'Expiry', 'vapt-security' ); ?></th>
+                             <th><?php esc_html_e( 'Last Seen', 'vapt-security' ); ?></th>
+                             <th><?php esc_html_e( 'Actions', 'vapt-security' ); ?></th>
                         </tr>
                     </thead>
                     <tbody>
                         <?php 
                         $tracking = get_option( 'vapt_build_tracking', [] );
-                        if ( empty( $tracking ) ) : ?>
-                            <tr><td colspan="7" style="text-align:center; padding: 40px; color: #999;"><?php esc_html_e( 'No active tracking data received yet.', 'vapt-security' ); ?></td></tr>
+                        $build_history = get_option( 'vapt_build_history', [] );
+                        $build_versions = [];
+                        $build_names = [];
+                        foreach ( $build_history as $b ) {
+                            $build_versions[ $b['id'] ] = $b['version'] ?? '';
+                            $build_names[ $b['id'] ] = $b['name'] ?? '';
+                        }
+                         if ( empty( $tracking ) ) : ?>
+                             <tr><td colspan="14" style="text-align:center; padding: 40px; color: #999;"><?php esc_html_e( 'No active tracking data received yet.', 'vapt-security' ); ?></td></tr>
                         <?php else : 
+                            $row_num = 0;
                             foreach ( array_reverse($tracking) as $bid => $t ) : 
+                                $row_num++;
                                 $is_online = (time() - $t['last_seen'] < 24 * HOUR_IN_SECONDS);
-                                $install_date = !empty($t['initial_install']) ? date_i18n( get_option( 'date_format' ), $t['initial_install'] ) : 'N/A';
-                                $activation_date = date_i18n( get_option( 'date_format' ), $t['first_activation'] );
-                                $expiry_date = !empty($t['license']['expiry']) ? date_i18n( get_option( 'date_format' ), $t['license']['expiry'] ) : 'Never';
+                                $datetime_format = get_option( 'date_format' ) . ' ' . get_option( 'time_format' );
+                                $install_date = !empty($t['initial_install']) ? date_i18n( $datetime_format, $t['initial_install'] ) : 'N/A';
+                                $activation_date = date_i18n( $datetime_format, $t['first_activation'] );
+                                $expiry_date = !empty($t['license']['expiry']) ? date_i18n( $datetime_format, $t['license']['expiry'] ) : 'Never';
+                                $build_version = $build_versions[$bid] ?? $t['version'] ?? '';
+                                $build_label = $build_names[$bid] ?? '';
+                                $row_bg = $row_num % 2 === 0 ? ' background: #f8f9fa;' : '';
                         ?>
-                            <tr>
-                                <td><span class="vapt-build-id"><?php echo esc_html($bid); ?></span></td>
+                            <tr style="<?php echo $row_bg; ?>">
+                                <td style="text-align:center; color: #888;"><?php echo $row_num; ?></td>
+                                <td style="text-align:center;"><input type="checkbox" class="vapt-tracking-checkbox" value="<?php echo esc_attr($bid); ?>"></td>
                                 <td>
-                                    <strong><?php echo esc_html($t['domain']); ?></strong><br>
-                                    <small style="color: #666;"><?php echo esc_html($t['ip']); ?></small>
+                                    <span class="vapt-build-id"><?php echo esc_html($bid); ?></span>
+                                    <?php if ( ! empty( $build_version ) ) : ?>
+                                        <span style="color: #999; font-size: 10px;"> / v<?php echo esc_html($build_version); ?></span>
+                                    <?php endif; ?>
+                                </td>
+                                <td style="font-size: 11px;">
+                                    <?php echo ! empty( $build_label ) ? esc_html( $build_label ) : '<span style="color: #999;">—</span>'; ?>
+                                </td>
+                                <td>
+                                    <strong><?php echo esc_html($t['domain']); ?></strong>
+                                    <?php if ( ! empty( $t['ip'] ) ) : ?>
+                                        <span style="color: #999; font-weight: 400;"> / <?php echo esc_html($t['ip']); ?></span>
+                                    <?php endif; ?>
+                                </td>
+                                <td>
+                                    <span class="badge" style="background: #2271b1; color:#fff; padding: 2px 8px; border-radius:10px; font-size:10px;">
+                                        <?php echo esc_html(strtoupper($t['license']['type'])); ?>
+                                    </span>
+                                    <span style="font-size: 10px; color: <?php echo ($t['license']['status'] === 'active') ? '#008a20' : '#d63638'; ?>; margin-left: 4px;">
+                                        <?php echo esc_html($t['license']['status']); ?>
+                                    </span>
                                 </td>
                                 <td>
                                     <span class="vapt-feature-status" style="background: <?php echo $is_online ? '#edfaef' : '#fcf0f1'; ?>; color: <?php echo $is_online ? '#008a20' : '#d63638'; ?>;">
                                         <?php echo $is_online ? 'ONLINE' : 'OFFLINE'; ?>
                                     </span>
                                 </td>
-                                <td style="font-size: 11px;">
-                                    I: <?php echo $install_date; ?><br>
-                                    A: <?php echo $activation_date; ?>
-                                </td>
+                                 <td style="font-size: 11px;">
+                                     <?php echo $install_date; ?>
+                                 </td>
+                                 <td style="font-size: 11px;">
+                                     <?php echo $activation_date; ?>
+                                 </td>
+                                 <td style="font-size: 11px; color: #666; width: 80px;">
+                                     <?php echo $t['license']['auto_renew'] ? esc_html__( 'Yes', 'vapt-security' ) : esc_html__( 'No', 'vapt-security' ); ?>
+                                 </td>
+                                 <td style="font-size: 11px; color: #666; width: 90px;">
+                                     <?php echo esc_html( $t['license']['renewal_count'] ?? 0 ); ?>
+                                 </td>
+                                 <td style="font-size: 11px;">
+                                     <?php echo $expiry_date; ?>
+                                 </td>
                                 <td style="font-size: 11px;">
                                     <?php echo human_time_diff( $t['last_seen'], time() ); ?> ago
                                 </td>
                                 <td>
-                                    <span class="badge" style="background: #2271b1; color:#fff; padding: 2px 8px; border-radius:10px; font-size:10px;">
-                                        <?php echo esc_html(strtoupper($t['license']['type'])); ?>
-                                    </span>
-                                    <small style="color:#666; margin-left: 5px;">v<?php echo esc_html($t['version']); ?></small>
-                                    <div style="font-size: 10px; color: <?php echo ($t['license']['status'] === 'active') ? '#008a20' : '#d63638'; ?>; margin-top: 4px;">
-                                        E: <?php echo $expiry_date; ?>
-                                    </div>
-                                </td>
-                                <td>
+                                    <button type="button" class="button button-small vapt-refresh-build" 
+                                        data-id="<?php echo esc_attr($bid); ?>"
+                                        title="<?php esc_attr_e( 'Refresh Status', 'vapt-security' ); ?>">
+                                        <span class="dashicons dashicons-update" style="font-size: 16px; margin-top: 3px;"></span>
+                                    </button>
                                     <button type="button" class="button button-small vapt-manage-build" 
                                         data-id="<?php echo esc_attr($bid); ?>" 
                                         data-domain="<?php echo esc_attr($t['domain']); ?>"
@@ -868,32 +1164,95 @@ $csv_names = [
         <div id="vapt-manage-modal" class="vapt-modal-overlay" style="display:none;">
             <div class="vapt-modal">
                 <div class="vapt-modal-header">
+                    <button type="button" class="vapt-modal-close" id="vapt-close-manage">&times;</button>
                     <h2><?php esc_html_e( 'Manage Remote Build', 'vapt-security' ); ?></h2>
-                    <p style="margin-top: -10px; font-size: 12px; color: #666;"><span id="vapt-manage-build-id"></span> on <span id="vapt-manage-domain"></span></p>
+                    <p style="margin-bottom: 12px;"><span id="vapt-manage-domain"></span></p>
+                    <div style="display: flex; align-items: center; gap: 16px; padding: 10px 14px; background: rgba(0,0,0,0.2); border-radius: 6px; margin-top: 4px;">
+                        <span class="vapt-modal-build-badge" style="margin: 0;"><span id="vapt-manage-build-id"></span></span>
+                        <span id="vapt-manage-license-type" style="background: rgba(255,255,255,0.2); padding: 3px 10px; border-radius: 4px; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;"></span>
+                        <span style="color: rgba(255,255,255,0.4);">|</span>
+                        <span style="font-size: 12px; color: rgba(255,255,255,0.8); display: flex; align-items: center; gap: 6px;">
+                            <span class="dashicons dashicons-calendar-alt" style="font-size: 14px; width: 14px; height: 14px; opacity: 0.7;"></span>
+                            <?php esc_html_e( 'Expires:', 'vapt-security' ); ?> <span id="vapt-manage-license-expiry" style="font-weight: 500;"></span>
+                        </span>
+                    </div>
                 </div>
                 <div class="vapt-modal-body">
-                    <div style="margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 6px; border: 1px solid #eee;">
-                        <h4 style="margin: 0 0 10px 0; font-size: 13px;"><?php esc_html_e( 'Extend License Term', 'vapt-security' ); ?></h4>
-                        <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-                            <button type="button" class="button vapt-push-action" data-action="EXTEND" data-val="term"><?php esc_html_e( 'Add Full Term', 'vapt-security' ); ?></button>
-                            <button type="button" class="button vapt-push-action" data-action="EXTEND" data-val="30"><?php esc_html_e( '+30 Days', 'vapt-security' ); ?></button>
-                            <button type="button" class="button vapt-push-action" data-action="EXTEND" data-val="90"><?php esc_html_e( '+90 Days', 'vapt-security' ); ?></button>
+                    <!-- Extend License Section -->
+                    <div class="vapt-modal-section" id="vapt-extend-section">
+                        <h4 class="vapt-modal-section-title">
+                            <span class="dashicons dashicons-update"></span>
+                            <?php esc_html_e( 'Extend License Term', 'vapt-security' ); ?>
+                        </h4>
+                        <div class="vapt-modal-actions" id="vapt-extend-buttons">
+                            <button type="button" class="button button-primary vapt-push-action" data-action="EXTEND" data-val="term">
+                                <span class="dashicons dashicons-clock"></span>
+                                <?php esc_html_e( 'Add Full Term', 'vapt-security' ); ?>
+                            </button>
+                            <button type="button" class="button vapt-push-action" data-action="EXTEND" data-val="7">
+                                <span class="dashicons dashicons-plus-alt2"></span>
+                                <?php esc_html_e( '7 Days', 'vapt-security' ); ?>
+                            </button>
+                            <button type="button" class="button vapt-push-action" data-action="EXTEND" data-val="15">
+                                <span class="dashicons dashicons-plus-alt2"></span>
+                                <?php esc_html_e( '15 Days', 'vapt-security' ); ?>
+                            </button>
+                            <button type="button" class="button vapt-push-action" data-action="EXTEND" data-val="30">
+                                <span class="dashicons dashicons-plus-alt2"></span>
+                                <?php esc_html_e( '30 Days', 'vapt-security' ); ?>
+                            </button>
                         </div>
-                        <div style="margin-top: 12px; display: flex; gap: 10px; align-items: center;">
-                            <input type="date" id="vapt-custom-expiry" class="regular-text" style="width: 150px;" min="<?php echo esc_attr( date_i18n( 'Y-m-d' ) ); ?>">
-                            <button type="button" class="button vapt-push-action" data-action="EXTEND" data-val="" id="vapt-apply-custom-term"><?php esc_html_e( 'Apply Custom Term', 'vapt-security' ); ?></button>
+                        <div class="vapt-modal-custom-row">
+                            <input type="date" id="vapt-custom-expiry" class="regular-text" min="<?php echo esc_attr( date_i18n( 'Y-m-d' ) ); ?>">
+                            <button type="button" class="button vapt-push-action" data-action="EXTEND" data-val="" id="vapt-apply-custom-term">
+                                <span class="dashicons dashicons-yes"></span>
+                                <?php esc_html_e( 'Apply', 'vapt-security' ); ?>
+                            </button>
+                            <label style="display: flex; align-items: center; gap: 5px; font-size: 12px; color: #666; cursor: pointer; margin-left: 8px;">
+                                <input type="checkbox" id="vapt-toggle-license-type">
+                                <?php esc_html_e( 'Change License', 'vapt-security' ); ?>
+                            </label>
                         </div>
-                        <p class="description"><?php esc_html_e( 'Adds time to current expiry. Client receives an email confirmation.', 'vapt-security' ); ?></p>
+                        <p class="vapt-modal-description"><?php esc_html_e( 'Adds time to current expiry. Client receives an email confirmation.', 'vapt-security' ); ?></p>
                     </div>
 
-                    <div style="padding: 15px; background: #fff5f5; border-radius: 6px; border: 1px solid #fecaca;">
-                        <h4 style="margin: 0 0 10px 0; font-size: 13px; color: #b91c1c;"><?php esc_html_e( 'Danger Zone', 'vapt-security' ); ?></h4>
-                        <button type="button" class="button button-link-delete vapt-push-action" data-action="SUSPEND" style="color: #d63638;"><?php esc_html_e( 'Suspend Remote Build', 'vapt-security' ); ?></button>
-                        <p class="description"><?php esc_html_e( 'Immediately deactivates the plugin on the client site.', 'vapt-security' ); ?></p>
+                    <!-- Change License Type Section (hidden by default) -->
+                    <div class="vapt-modal-section" id="vapt-change-type-section" style="display: none; background: #f8f9fa; border: 1px solid #e5e5e5; border-radius: 8px; padding: 16px;">
+                        <h4 class="vapt-modal-section-title">
+                            <span class="dashicons dashicons-admin-generic"></span>
+                            <?php esc_html_e( 'Change License Type', 'vapt-security' ); ?>
+                        </h4>
+                        <div style="display: flex; gap: 10px; align-items: center;">
+                            <select id="vapt-change-license-type" class="regular-text" style="flex: 1; max-width: 200px;">
+                                <option value="trial"><?php esc_html_e( 'Trial (7 days)', 'vapt-security' ); ?></option>
+                                <option value="demo"><?php esc_html_e( 'Demo (15 days)', 'vapt-security' ); ?></option>
+                                <option value="standard"><?php esc_html_e( 'Standard (30 days)', 'vapt-security' ); ?></option>
+                                <option value="pro"><?php esc_html_e( 'Pro (365 days)', 'vapt-security' ); ?></option>
+                                <option value="developer"><?php esc_html_e( 'Developer (365 days)', 'vapt-security' ); ?></option>
+                            </select>
+                            <button type="button" class="button" id="vapt-apply-license-type">
+                                <span class="dashicons dashicons-yes"></span>
+                                <?php esc_html_e( 'Apply', 'vapt-security' ); ?>
+                            </button>
+                        </div>
+                        <p class="vapt-modal-description"><?php esc_html_e( 'Changes the license type and sets expiry based on the selected term.', 'vapt-security' ); ?></p>
+                    </div>
+
+                    <!-- Danger Zone -->
+                    <div class="vapt-modal-danger-zone">
+                        <h4 class="vapt-modal-section-title">
+                            <span class="dashicons dashicons-warning"></span>
+                            <?php esc_html_e( 'Danger Zone', 'vapt-security' ); ?>
+                        </h4>
+                        <button type="button" class="button vapt-push-action" data-action="SUSPEND">
+                            <span class="dashicons dashicons-controls-pause"></span>
+                            <?php esc_html_e( 'Suspend Remote Build', 'vapt-security' ); ?>
+                        </button>
+                        <p class="vapt-modal-description"><?php esc_html_e( 'Immediately deactivates the plugin on the client site.', 'vapt-security' ); ?></p>
                     </div>
                 </div>
                 <div class="vapt-modal-footer">
-                    <button type="button" class="button" id="vapt-close-manage"><?php esc_html_e( 'Close', 'vapt-security' ); ?></button>
+                    <button type="button" class="button" id="vapt-close-manage-footer"><?php esc_html_e( 'Close', 'vapt-security' ); ?></button>
                 </div>
             </div>
         </div>
@@ -928,21 +1287,26 @@ jQuery(document).ready(function($) {
         error: function(title, text) { this.show('error', title, text); },
         warning: function(title, text) { this.show('warning', title, text); },
         info: function(title, text) { this.show('info', title, text); },
-        confirm: function(title, text, onConfirm) {
+        confirm: function(title, text, onConfirm, onCancel, confirmLabel, cancelLabel) {
+            confirmLabel = confirmLabel || 'Confirm';
+            cancelLabel  = cancelLabel  || 'Cancel';
             const overlay = $(`
                 <div class="vapt-modal-overlay">
                     <div class="vapt-modal">
                         <div class="vapt-modal-header"><h2>${title}</h2></div>
                         <div class="vapt-modal-body">${text}</div>
                         <div class="vapt-modal-footer">
-                            <button class="button vapt-cancel">Cancel</button>
-                            <button class="button button-primary vapt-confirm">Confirm</button>
+                            <button class="button vapt-cancel">${cancelLabel}</button>
+                            <button class="button button-primary vapt-confirm">${confirmLabel}</button>
                         </div>
                     </div>
                 </div>
             `);
             $('body').append(overlay);
-            overlay.find('.vapt-cancel').click(() => overlay.remove());
+            overlay.find('.vapt-cancel').click(() => {
+                overlay.remove();
+                if (typeof onCancel === 'function') onCancel();
+            });
             overlay.find('.vapt-confirm').click(() => {
                 overlay.remove();
                 if (typeof onConfirm === 'function') onConfirm();
@@ -1184,6 +1548,7 @@ jQuery(document).ready(function($) {
             license_type: $('#vapt-lock-license-type').val(),
             auto_renew: $('#vapt-lock-license-auto-renew').is(':checked') ? 1 : 0,
             include_settings: $('#vapt-lock-include-settings').is(':checked') ? 1 : 0,
+            include_callback_test: $('#vapt-include-callback-test').is(':checked') ? 1 : 0,
             wl_name: $('#vapt-wl-name').val(),
             wl_slug: $('#vapt-wl-slug').val(),
             wl_description: $('#vapt-wl-description').val(),
@@ -1206,12 +1571,9 @@ jQuery(document).ready(function($) {
         });
     });
 
-    $('#vapt-generate-client-zip').click(function(){
-        var btn = $(this);
-        var originalText = btn.text();
-        btn.prop('disabled', true).text('<?php esc_html_e( 'Generating Build...', 'vapt-security' ); ?>');
-        
-        $.post(ajaxurl, {
+    // Helper: actually fire the generate-client-zip AJAX with optional overwrite flags
+    function doGenerateClientZip(extraParams) {
+        var params = {
             action: 'vapt_generate_client_zip',
             edit_id: $('#vapt-build-id-tracking').val(),
             domain: $('#vapt-lock-domain').val(),
@@ -1219,6 +1581,7 @@ jQuery(document).ready(function($) {
             license_type: $('#vapt-lock-license-type').val(),
             auto_renew: $('#vapt-lock-license-auto-renew').is(':checked') ? 1 : 0,
             include_settings: $('#vapt-lock-include-settings').is(':checked') ? 1 : 0,
+            include_callback_test: $('#vapt-include-callback-test').is(':checked') ? 1 : 0,
             wl_name: $('#vapt-wl-name').val(),
             wl_slug: $('#vapt-wl-slug').val(),
             wl_description: $('#vapt-wl-description').val(),
@@ -1230,15 +1593,61 @@ jQuery(document).ready(function($) {
             tracking_mode: $('#vapt-lock-tracking-mode').val(),
             custom_url: $('#vapt-lock-custom-url').val(),
             nonce: '<?php echo wp_create_nonce( "vapt_locked_config" ); ?>'
-        }, function(r){
-            btn.prop('disabled', false).text(originalText);
-            if(r.success) {
-                vaptNotify.success('<?php echo esc_js( __( 'Success', 'vapt-security' ) ); ?>', r.data.message);
-                refreshHistoryTable(); // Refresh table immediately
-            } else {
-                vaptNotify.error('<?php echo esc_js( __( 'Error', 'vapt-security' ) ); ?>', r.data.message);
-            }
-        });
+        };
+        $.extend(params, extraParams || {});
+        return $.post(ajaxurl, params);
+    }
+
+    $('#vapt-generate-client-zip').click(function(){
+        var btn = $(this);
+        var originalText = btn.text();
+
+        function startBuild(extraParams) {
+            btn.prop('disabled', true).text('<?php esc_html_e( 'Generating Build...', 'vapt-security' ); ?>');
+            $('#vapt-build-loading-overlay').fadeIn(200);
+
+            doGenerateClientZip(extraParams)
+            .done(function(r){
+                $('#vapt-build-loading-overlay').fadeOut(200);
+                btn.prop('disabled', false).text(originalText);
+
+                if ( r.success && r.data.needs_confirm ) {
+                    // Duplicate filename â€” ask user what to do
+                    vaptNotify.confirm(
+                        '<?php echo esc_js( __( 'File Already Exists', 'vapt-security' ) ); ?>',
+                        r.data.message + '<br><br><?php echo esc_js( __( 'Choose: <strong>Overwrite</strong> replaces the existing file. <strong>Save as New</strong> appends a timestamp.', 'vapt-security' ) ); ?>',
+                        function() {
+                            // "Confirm" = Overwrite
+                            startBuild({ confirm_overwrite: 1 });
+                        },
+                        function() {
+                            // "Cancel" = Save as new
+                            startBuild({ confirm_overwrite: 1, save_as_new: 1 });
+                        },
+                        '<?php echo esc_js( __( 'Overwrite', 'vapt-security' ) ); ?>',
+                        '<?php echo esc_js( __( 'Save as New', 'vapt-security' ) ); ?>'
+                    );
+                    return;
+                }
+
+                if ( r.success ) {
+                    vaptNotify.success(
+                        '<?php echo esc_js( __( 'Build Ready', 'vapt-security' ) ); ?>',
+                        r.data.message + (r.data.filename ? ' &mdash; <strong>' + r.data.filename + '</strong>' : '')
+                    );
+                    refreshHistoryTable();
+                } else {
+                    vaptNotify.error('<?php echo esc_js( __( 'Error', 'vapt-security' ) ); ?>', r.data.message);
+                }
+            })
+            .fail(function(){
+                $('#vapt-build-loading-overlay').fadeOut(200);
+                btn.prop('disabled', false).text(originalText);
+                vaptNotify.error('<?php echo esc_js( __( 'Connection Error', 'vapt-security' ) ); ?>', '<?php echo esc_js( __( 'Request failed. Please try again.', 'vapt-security' ) ); ?>');
+            });
+        }
+
+        startBuild();
     });
     // Edit/Reuse Build Settings
     $(document).on('click', '.vapt-edit-build', function(){
@@ -1257,6 +1666,13 @@ jQuery(document).ready(function($) {
         $('#vapt-wl-version').val(btn.data('version')).trigger('input');
         $('#vapt-wl-wp-version').val(btn.data('wp'));
         $('#vapt-wl-php-version').val(btn.data('php'));
+        
+         // Pre-populate callback test checkbox
+         $('#vapt-include-callback-test').prop('checked', btn.data('callback-test') === '1' || btn.data('callback-test') === true);
+         // Pre-populate auto renew checkbox
+         $('#vapt-lock-license-auto-renew').prop('checked', btn.data('auto-renew') === '1' || btn.data('auto-renew') === true);
+         // Set renewal count (display only)
+         $('#vapt-lock-renewal-count').text(btn.data('renewal-count'));
         
         // Scroll to top of generator
         $('html, body').animate({
@@ -1522,9 +1938,24 @@ jQuery(document).ready(function($) {
         var btn = $(this);
         var bid = btn.data('id');
         var domain = btn.data('domain');
+        var licenseType = btn.data('type');
+        var licenseExpiry = btn.data('expiry');
         
         $('#vapt-manage-build-id').text(bid);
         $('#vapt-manage-domain').text(domain);
+        $('#vapt-manage-license-type').text(licenseType.toUpperCase());
+        
+        if (licenseExpiry && licenseExpiry > 0) {
+            var expiryDate = new Date(licenseExpiry * 1000);
+            var formatted = expiryDate.toLocaleDateString() + ' ' + expiryDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            $('#vapt-manage-license-expiry').text(formatted);
+        } else {
+            $('#vapt-manage-license-expiry').text('Never');
+        }
+        
+        // Pre-select current license type in dropdown
+        $('#vapt-change-license-type').val(licenseType);
+        
         $('.vapt-push-action').data('id', bid);
         
         $('#vapt-manage-modal').fadeIn(200);
@@ -1532,6 +1963,33 @@ jQuery(document).ready(function($) {
 
     $('#vapt-close-manage').click(function() {
         $('#vapt-manage-modal').fadeOut(200);
+    });
+
+    $('#vapt-close-manage-footer').click(function() {
+        $('#vapt-manage-modal').fadeOut(200);
+    });
+
+    // Close modal when clicking outside
+    $('#vapt-manage-modal').on('click', function(e) {
+        if ($(e.target).is('.vapt-modal-overlay')) {
+            $(this).fadeOut(200);
+        }
+    });
+
+    // Toggle Change License Type section
+    $('#vapt-toggle-license-type').on('change', function() {
+        var isChecked = $(this).is(':checked');
+        if (isChecked) {
+            $('#vapt-change-type-section').slideDown(200);
+            $('#vapt-extend-buttons .button').prop('disabled', true).css('opacity', '0.5');
+            $('#vapt-apply-custom-term').prop('disabled', true).css('opacity', '0.5');
+            $('#vapt-custom-expiry').prop('disabled', true).css('opacity', '0.5');
+        } else {
+            $('#vapt-change-type-section').slideUp(200);
+            $('#vapt-extend-buttons .button').prop('disabled', false).css('opacity', '1');
+            $('#vapt-apply-custom-term').prop('disabled', false).css('opacity', '1');
+            $('#vapt-custom-expiry').prop('disabled', false).css('opacity', '1');
+        }
     });
 
     $('#vapt-apply-custom-term').click(function() {
@@ -1553,6 +2011,38 @@ jQuery(document).ready(function($) {
                 build_id: bid,
                 cmd_type: 'EXTEND',
                 cmd_val: customDate,
+                nonce: '<?php echo wp_create_nonce( "vapt_locked_config" ); ?>'
+            }, function(r) {
+                btn.prop('disabled', false).css('opacity', '1');
+                if (r.success) {
+                    vaptNotify.success('Success', r.data.message);
+                } else {
+                    vaptNotify.error('Action Failed', r.data.message);
+                }
+            });
+        });
+    });
+
+    // Change License Type
+    $('#vapt-apply-license-type').click(function() {
+        var btn = $(this);
+        var bid = $('.vapt-push-action').first().data('id');
+        var newType = $('#vapt-change-license-type').val();
+        
+        if ( ! newType ) {
+            vaptNotify.error('Error', 'Please select a license type.');
+            return;
+        }
+        
+        var confirmMsg = 'Are you sure you want to change the license type to <strong>' + newType.toUpperCase() + '</strong>? This will update the expiry date accordingly.';
+        vaptNotify.confirm('Change License Type', confirmMsg, function() {
+            btn.prop('disabled', true).css('opacity', '0.5');
+            
+            $.post(ajaxurl, {
+                action: 'vapt_push_remote_command',
+                build_id: bid,
+                cmd_type: 'CHANGE_TYPE',
+                cmd_val: newType,
                 nonce: '<?php echo wp_create_nonce( "vapt_locked_config" ); ?>'
             }, function(r) {
                 btn.prop('disabled', false).css('opacity', '1');
@@ -1594,5 +2084,165 @@ jQuery(document).ready(function($) {
             });
         });
     });
+
+    // Include Callback Test toggle â€” state is baked into the generated config, no server save needed here
+
+    // Dismiss callback test notice (session only â€” re-appears until config is regenerated without the toggle)
+    $('#vapt-diag-dismiss-btn').click(function() {
+        $('#vapt-callback-diag').slideUp(200);
+    });
+
+    // TEMP: Callback diagnostic â€” fires from client site to master
+    $('#vapt-diag-ping-btn').click(function() {
+        var btn = $(this);
+        btn.prop('disabled', true).text('<?php echo esc_js( __( 'Testing...', 'vapt-security' ) ); ?>');
+
+        $.post(ajaxurl, {
+            action: 'vapt_force_ping',
+            nonce:  '<?php echo wp_create_nonce( "vapt_locked_config" ); ?>'
+        }, function(r) {
+            btn.prop('disabled', false).html('<span class="dashicons dashicons-networking" style="margin-top:3px;font-size:16px;width:16px;height:16px;line-height:16px;"></span> <?php echo esc_js( __( 'Test Callback to Master', 'vapt-security' ) ); ?>');
+
+            var d       = r.data || {};
+            var result  = $('#vapt-diag-ping-result');
+            var rawBody = d.body || '';
+            try { rawBody = JSON.stringify(JSON.parse(rawBody), null, 2); } catch(e) {}
+            var metaStr = 'HTTP ' + (d.status || '?') + ' | SSL: ' + (d.sslverify ? 'on' : 'off');
+
+            if (r.success && d.ok) {
+                result.css('border-left', '3px solid #00a32a');
+                $('#vapt-diag-icon').text('[OK]');
+                $('#vapt-diag-title').text('<?php echo esc_js( __( 'Master acknowledged the ping.', 'vapt-security' ) ); ?>');
+            } else if (r.success && !d.ok) {
+                result.css('border-left', '3px solid #dba617');
+                $('#vapt-diag-icon').text('[WARN]');
+                $('#vapt-diag-title').text('<?php echo esc_js( __( 'Reached master but got unexpected response.', 'vapt-security' ) ); ?>');
+            } else {
+                result.css('border-left', '3px solid #d63638');
+                $('#vapt-diag-icon').text('[FAIL]');
+                $('#vapt-diag-title').text(d.message || '<?php echo esc_js( __( 'Connection failed.', 'vapt-security' ) ); ?>');
+            }
+
+            $('#vapt-diag-meta').text(metaStr);
+            if (rawBody) { $('#vapt-diag-body').text(rawBody).show(); }
+            result.slideDown(200);
+        }).fail(function() {
+            btn.prop('disabled', false).html('<span class="dashicons dashicons-networking" style="margin-top:3px;font-size:16px;width:16px;height:16px;line-height:16px;"></span> <?php echo esc_js( __( 'Test Callback to Master', 'vapt-security' ) ); ?>');
+            vaptNotify.error('<?php echo esc_js( __( 'Connection Error', 'vapt-security' ) ); ?>', '<?php echo esc_js( __( 'AJAX request failed.', 'vapt-security' ) ); ?>');
+        });
+    });
+
+    // === Refresh/Ping/Track Functionality ===
+
+    var vaptTrackingNonce = '<?php echo wp_create_nonce( "vapt_locked_config" ); ?>';
+    var vaptPostPingTimer = null;
+    var vaptPostPingCount = 0;
+    var vaptPostPingMax = 12; // 12 * 5s = 60s max
+
+    function vaptRefreshTrackingTable(callback) {
+        $.post(ajaxurl, {
+            action: 'vapt_get_tracking_table',
+            nonce: vaptTrackingNonce
+        }, function(r) {
+            if (r.success && r.data.html) {
+                $('#vapt-tab-tracking .vapt-history-table tbody').html(r.data.html);
+            }
+            if (typeof callback === 'function') callback(r);
+        });
+    }
+
+    function vaptStartPostPingRefresh() {
+        vaptPostPingCount = 0;
+        if (vaptPostPingTimer) clearInterval(vaptPostPingTimer);
+        vaptPostPingTimer = setInterval(function() {
+            vaptPostPingCount++;
+            vaptRefreshTrackingTable();
+            if (vaptPostPingCount >= vaptPostPingMax) {
+                clearInterval(vaptPostPingTimer);
+                vaptPostPingTimer = null;
+            }
+        }, 5000);
+    }
+
+    // Per-row refresh button
+    $(document).on('click', '.vapt-refresh-build', function() {
+        var btn = $(this);
+        var bid = btn.data('id');
+        var icon = btn.find('.dashicons');
+
+        btn.prop('disabled', true);
+        icon.addClass('vapt-spin');
+
+        $.post(ajaxurl, {
+            action: 'vapt_refresh_build_status',
+            build_ids: bid,
+            nonce: vaptTrackingNonce
+        }, function(r) {
+            icon.removeClass('vapt-spin');
+            btn.prop('disabled', false);
+            if (r.success) {
+                vaptNotify.success('<?php echo esc_js( __( 'Ping Queued', 'vapt-security' ) ); ?>', r.data.message);
+                vaptStartPostPingRefresh();
+            } else {
+                vaptNotify.error('<?php echo esc_js( __( 'Failed', 'vapt-security' ) ); ?>', r.data.message);
+            }
+        }).fail(function() {
+            icon.removeClass('vapt-spin');
+            btn.prop('disabled', false);
+            vaptNotify.error('<?php echo esc_js( __( 'Error', 'vapt-security' ) ); ?>', '<?php echo esc_js( __( 'AJAX request failed.', 'vapt-security' ) ); ?>');
+        });
+    });
+
+    // Select All checkbox
+    $(document).on('change', '#vapt-select-all-tracking', function() {
+        var checked = this.checked;
+        $('.vapt-tracking-checkbox').prop('checked', checked);
+        $('#vapt-ping-selected').prop('disabled', !checked);
+    });
+
+    // Individual checkbox change
+    $(document).on('change', '.vapt-tracking-checkbox', function() {
+        var total = $('.vapt-tracking-checkbox').length;
+        var checked = $('.vapt-tracking-checkbox:checked').length;
+        $('#vapt-select-all-tracking').prop('checked', total > 0 && total === checked);
+        $('#vapt-ping-selected').prop('disabled', checked === 0);
+    });
+
+    // Bulk Ping Selected
+    $('#vapt-ping-selected').on('click', function() {
+        var btn = $(this);
+        var ids = [];
+        $('.vapt-tracking-checkbox:checked').each(function() {
+            ids.push($(this).val());
+        });
+        if (!ids.length) return;
+
+        btn.prop('disabled', true).text('<?php echo esc_js( __( 'Pinging...', 'vapt-security' ) ); ?>');
+
+        $.post(ajaxurl, {
+            action: 'vapt_refresh_build_status',
+            build_ids: ids.join(','),
+            nonce: vaptTrackingNonce
+        }, function(r) {
+            btn.prop('disabled', false).html('<span class="dashicons dashicons-update" style="margin-top:4px;"></span> <?php echo esc_js( __( 'Ping Selected', 'vapt-security' ) ); ?>');
+            if (r.success) {
+                vaptNotify.success('<?php echo esc_js( __( 'Queued', 'vapt-security' ) ); ?>', r.data.message);
+                vaptStartPostPingRefresh();
+            } else {
+                vaptNotify.error('<?php echo esc_js( __( 'Failed', 'vapt-security' ) ); ?>', r.data.message);
+            }
+        }).fail(function() {
+            btn.prop('disabled', false).html('<span class="dashicons dashicons-update" style="margin-top:4px;"></span> <?php echo esc_js( __( 'Ping Selected', 'vapt-security' ) ); ?>');
+            vaptNotify.error('<?php echo esc_js( __( 'Error', 'vapt-security' ) ); ?>', '<?php echo esc_js( __( 'AJAX request failed.', 'vapt-security' ) ); ?>');
+        });
+    });
+
+    // Passive auto-refresh every 6 hours
+    setInterval(function() {
+        if (!document.hidden && $('#vapt-tab-tracking').is(':visible')) {
+            vaptRefreshTrackingTable();
+        }
+    }, 6 * 60 * 60 * 1000);
+
 });
 </script>

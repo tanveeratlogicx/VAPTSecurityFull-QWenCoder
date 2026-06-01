@@ -1,0 +1,23 @@
+# .buildincl — Client Build Include List
+# Only files/directories listed here are packaged into the client zip.
+# One entry per line. Directory entries include all files recursively.
+# Lines starting with # are comments.
+
+# Core plugin files
+vapt-security.php
+uninstall.php
+README.txt
+USER_GUIDE.md
+
+# Assets
+assets/
+
+# Includes (PHP classes)
+includes/
+
+# Templates
+templates/
+
+# Vendor (runtime dependencies only)
+vendor/autoload.php
+vendor/composer/
