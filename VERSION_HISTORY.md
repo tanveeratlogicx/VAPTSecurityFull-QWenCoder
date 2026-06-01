@@ -1,5 +1,13 @@
+We need to add new version entry at top. Keep original markdown. So output file with new entry then rest.```markdown
 # Version History
 
+---
+## v3.4.1 - 2026-06-01
+
+### Added
+- Bumped version to 3.4.1 after large refactor.
+- Updated plugin header and package.json.
+---
 ## v3.3.0 - 2026-05-25
 
 ### Added
