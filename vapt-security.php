@@ -1873,6 +1873,211 @@ final class VAPT_Security {
         wp_send_json_success( [ 'version' => $last_version ] );
     }
 
+    public function handle_refresh_build_status() {
+        check_ajax_referer( 'vapt_locked_config', 'nonce' );
+        if ( ! $this->is_master_admin() ) {
+            wp_send_json_error( [ 'message' => 'Unauthorized' ], 403 );
+        }
+
+        $build_ids_raw = $_POST['build_ids'] ?? '';
+        if ( is_array( $build_ids_raw ) ) {
+            $build_ids = array_map( 'sanitize_text_field', $build_ids_raw );
+        } else {
+            $build_ids_raw = sanitize_text_field( (string) $build_ids_raw );
+            $build_ids     = array_map( 'trim', explode( ',', $build_ids_raw ) );
+        }
+
+        $build_ids = array_values( array_filter( array_unique( array_map( 'sanitize_text_field', $build_ids ) ) ) );
+        if ( empty( $build_ids ) ) {
+            wp_send_json_error( [ 'message' => __( 'No builds selected.', 'vapt-security' ) ] );
+        }
+
+        $tracking = get_option( 'vapt_build_tracking', [] );
+        if ( ! is_array( $tracking ) ) {
+            $tracking = [];
+        }
+
+        $pending = get_option( 'vapt_pending_commands', [] );
+        if ( ! is_array( $pending ) ) {
+            $pending = [];
+        }
+
+        $queued  = [];
+        $skipped = [];
+
+        foreach ( $build_ids as $bid ) {
+            if ( $bid === '' ) {
+                continue;
+            }
+
+            if ( empty( $tracking ) || ! array_key_exists( $bid, $tracking ) ) {
+                $skipped[] = $bid;
+                continue;
+            }
+
+            if ( ! isset( $pending[ $bid ] ) || ! is_array( $pending[ $bid ] ) ) {
+                $pending[ $bid ] = [];
+            }
+
+            $last = end( $pending[ $bid ] );
+            if ( is_array( $last ) && ( $last['type'] ?? '' ) === 'FORCE_CHECKIN' ) {
+                $queued[] = $bid;
+                continue;
+            }
+
+            $pending[ $bid ][] = [ 'type' => 'FORCE_CHECKIN' ];
+            $queued[]          = $bid;
+        }
+
+        update_option( 'vapt_pending_commands', $pending, false );
+
+        if ( empty( $queued ) ) {
+            wp_send_json_error( [ 'message' => __( 'No valid builds to ping.', 'vapt-security' ), 'skipped' => $skipped ] );
+        }
+
+        $msg = sprintf(
+            _n( 'Queued refresh for %d build.', 'Queued refresh for %d builds.', count( $queued ), 'vapt-security' ),
+            count( $queued )
+        );
+
+        wp_send_json_success(
+            [
+                'message'  => $msg,
+                'queued'   => count( $queued ),
+                'builds'   => $queued,
+                'skipped'  => $skipped,
+            ]
+        );
+    }
+
+    public function handle_get_tracking_table() {
+        check_ajax_referer( 'vapt_locked_config', 'nonce' );
+        if ( ! $this->is_master_admin() ) {
+            wp_send_json_error( [ 'message' => 'Unauthorized' ], 403 );
+        }
+
+        $tracking = get_option( 'vapt_build_tracking', [] );
+        if ( ! is_array( $tracking ) ) {
+            $tracking = [];
+        }
+
+        $build_history  = get_option( 'vapt_build_history', [] );
+        $build_versions = [];
+        $build_names    = [];
+
+        if ( is_array( $build_history ) ) {
+            foreach ( $build_history as $b ) {
+                if ( ! is_array( $b ) ) continue;
+                if ( empty( $b['id'] ) ) continue;
+                $build_versions[ $b['id'] ] = $b['version'] ?? '';
+                $build_names[ $b['id'] ]    = $b['name'] ?? '';
+            }
+        }
+
+        ob_start();
+
+        if ( empty( $tracking ) ) {
+            ?>
+            <tr><td colspan="14" style="text-align:center; padding: 40px; color: #999;"><?php esc_html_e( 'No active tracking data received yet.', 'vapt-security' ); ?></td></tr>
+            <?php
+        } else {
+            $row_num         = 0;
+            $datetime_format = get_option( 'date_format' ) . ' ' . get_option( 'time_format' );
+
+            foreach ( array_reverse( $tracking, true ) as $bid => $t ) {
+                $row_num++;
+                $t = is_array( $t ) ? $t : [];
+
+                $last_seen  = isset( $t['last_seen'] ) ? (int) $t['last_seen'] : 0;
+                $is_online  = $last_seen > 0 && ( time() - $last_seen < 24 * HOUR_IN_SECONDS );
+                $row_bg     = $row_num % 2 === 0 ? ' background: #f8f9fa;' : '';
+
+                $domain = $t['domain'] ?? '';
+                $ip     = $t['ip'] ?? '';
+                $license = is_array( $t['license'] ?? null ) ? $t['license'] : [];
+
+                $install_ts    = isset( $t['initial_install'] ) ? (int) $t['initial_install'] : 0;
+                $activation_ts = isset( $t['first_activation'] ) ? (int) $t['first_activation'] : 0;
+                $expiry_ts     = isset( $license['expiry'] ) ? (int) $license['expiry'] : 0;
+
+                $install_date    = $install_ts ? date_i18n( $datetime_format, $install_ts ) : 'N/A';
+                $activation_date = $activation_ts ? date_i18n( $datetime_format, $activation_ts ) : 'N/A';
+                $expiry_date     = $expiry_ts ? date_i18n( $datetime_format, $expiry_ts ) : __( 'Never', 'vapt-security' );
+
+                $build_version = $build_versions[ $bid ] ?? ( $t['version'] ?? '' );
+                $build_label   = $build_names[ $bid ] ?? '';
+
+                $lic_type   = strtoupper( (string) ( $license['type'] ?? '' ) );
+                $lic_status = (string) ( $license['status'] ?? '' );
+                $lic_status_color = ( $lic_status === 'active' ) ? '#008a20' : '#d63638';
+                $auto_renew = ! empty( $license['auto_renew'] );
+                $renewals   = $license['renewal_count'] ?? 0;
+                ?>
+                <tr style="<?php echo esc_attr( $row_bg ); ?>">
+                    <td style="text-align:center; color: #888;"><?php echo esc_html( (string) $row_num ); ?></td>
+                    <td style="text-align:center;"><input type="checkbox" class="vapt-tracking-checkbox" value="<?php echo esc_attr( (string) $bid ); ?>"></td>
+                    <td>
+                        <span class="vapt-build-id"><?php echo esc_html( (string) $bid ); ?></span>
+                        <?php if ( ! empty( $build_version ) ) : ?>
+                            <span style="color: #999; font-size: 10px;"> / v<?php echo esc_html( (string) $build_version ); ?></span>
+                        <?php endif; ?>
+                    </td>
+                    <td style="font-size: 11px;">
+                        <?php echo ! empty( $build_label ) ? esc_html( (string) $build_label ) : '<span style="color: #999;">—</span>'; ?>
+                    </td>
+                    <td>
+                        <strong><?php echo esc_html( (string) $domain ); ?></strong>
+                        <?php if ( ! empty( $ip ) ) : ?>
+                            <span style="color: #999; font-weight: 400;"> / <?php echo esc_html( (string) $ip ); ?></span>
+                        <?php endif; ?>
+                    </td>
+                    <td>
+                        <span class="badge" style="background: #2271b1; color:#fff; padding: 2px 8px; border-radius:10px; font-size:10px;">
+                            <?php echo esc_html( $lic_type !== '' ? $lic_type : '—' ); ?>
+                        </span>
+                        <?php if ( $lic_status !== '' ) : ?>
+                            <span style="font-size: 10px; color: <?php echo esc_attr( $lic_status_color ); ?>; margin-left: 4px;">
+                                <?php echo esc_html( $lic_status ); ?>
+                            </span>
+                        <?php endif; ?>
+                    </td>
+                    <td>
+                        <span class="vapt-feature-status" style="background: <?php echo esc_attr( $is_online ? '#edfaef' : '#fcf0f1' ); ?>; color: <?php echo esc_attr( $is_online ? '#008a20' : '#d63638' ); ?>;">
+                            <?php echo esc_html( $is_online ? 'ONLINE' : 'OFFLINE' ); ?>
+                        </span>
+                    </td>
+                    <td style="font-size: 11px;"><?php echo esc_html( (string) $install_date ); ?></td>
+                    <td style="font-size: 11px;"><?php echo esc_html( (string) $activation_date ); ?></td>
+                    <td style="font-size: 11px; color: #666; width: 80px;">
+                        <?php echo $auto_renew ? esc_html__( 'Yes', 'vapt-security' ) : esc_html__( 'No', 'vapt-security' ); ?>
+                    </td>
+                    <td style="font-size: 11px; color: #666; width: 90px;"><?php echo esc_html( (string) $renewals ); ?></td>
+                    <td style="font-size: 11px;"><?php echo esc_html( (string) $expiry_date ); ?></td>
+                    <td style="font-size: 11px;">
+                        <?php echo $last_seen ? esc_html( human_time_diff( $last_seen, time() ) ) . ' ago' : esc_html__( 'Never', 'vapt-security' ); ?>
+                    </td>
+                    <td>
+                        <button type="button" class="button button-small vapt-refresh-build" data-id="<?php echo esc_attr( (string) $bid ); ?>" title="<?php esc_attr_e( 'Refresh Status', 'vapt-security' ); ?>">
+                            <span class="dashicons dashicons-update" style="font-size: 16px; margin-top: 3px;"></span>
+                        </button>
+                        <button type="button" class="button button-small vapt-manage-build"
+                            data-id="<?php echo esc_attr( (string) $bid ); ?>"
+                            data-domain="<?php echo esc_attr( (string) $domain ); ?>"
+                            data-expiry="<?php echo esc_attr( (string) ( $license['expiry'] ?? '' ) ); ?>"
+                            data-type="<?php echo esc_attr( (string) ( $license['type'] ?? '' ) ); ?>"
+                            title="<?php esc_attr_e( 'Manage Deployment', 'vapt-security' ); ?>">
+                            <span class="dashicons dashicons-admin-settings" style="font-size: 16px; margin-top: 3px;"></span>
+                        </button>
+                    </td>
+                </tr>
+                <?php
+            }
+        }
+
+        $html = trim( (string) ob_get_clean() );
+        wp_send_json_success( [ 'html' => $html ] );
+    }
+
     /**
      * Generate Domain Locked Configuration File
      */
