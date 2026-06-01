@@ -94,7 +94,10 @@ $is_verified_super = $is_superadmin ? get_transient( 'vapt_auth_' . $current_use
             .vapt-vertical-tabs .ui-tabs-nav {
                 display: block;
                 float: none;
-                width: 200px;
+                width: max-content;
+                min-width: 260px;
+                max-width: 360px;
+                flex: 0 0 auto;
                 padding: 0;
                 margin: 0;
                 background: #f0f0f1;
@@ -106,7 +109,7 @@ $is_verified_super = $is_superadmin ? get_transient( 'vapt_auth_' . $current_use
                 border: none;
                 border-bottom: 1px solid #c3c4c7;
                 background: #f0f0f1;
-                white-space: normal;
+                white-space: nowrap;
             }
             .vapt-vertical-tabs .ui-tabs-nav li a {
                  display: block;
@@ -114,6 +117,9 @@ $is_verified_super = $is_superadmin ? get_transient( 'vapt_auth_' . $current_use
                  font-weight: 600;
                  color: #2271b1 !important;
                  text-decoration: none;
+                 white-space: nowrap;
+                 overflow: hidden;
+                 text-overflow: ellipsis;
             }
             .vapt-vertical-tabs .ui-tabs-nav li.ui-tabs-active {
                 background: #fff;

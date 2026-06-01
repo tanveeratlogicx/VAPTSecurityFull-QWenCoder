@@ -1,5 +1,16 @@
-The user wants to prepend new version entry. Keep markdown structure. So add at top after "# Version History"? Probably after heading. The suggestion shows just adding entry then --- then existing content. We'll output full file with new entry at top.```markdown
 # Version History
+
+---
+## v3.4.3 - 2026-06-01
+
+### Fixed
+- Restore missing `VAPT_Security` callbacks and domain-lock enforcement to prevent runtime fatals.
+- Avoid “headers already sent” warnings by removing the pingback header via `wp_headers` (instead of `wp_head`).
+
+### Changed
+- Treat `vaptsecure.local` as the master site for bypassing client config/white-label behavior, without broadening superadmin access.
+- Admin UI: widen vertical sidebar tabs and prevent label wrapping; harden Build Tracking rendering when `auto_renew` is missing.
+- Shorten plugin label to `VAPTSecurity–Full`.
 
 ---
 ## v3.4.2 - 2026-06-01

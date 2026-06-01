@@ -1,9 +1,9 @@
 <?php
 /**
- * Plugin Name: VAPT Security - Full
+ * Plugin Name: VAPTSecurity–Full
  * Plugin URI:  https://github.com/tanveeratlogicx/vapt-security-full
  * Description: A comprehensive WordPress plugin that protects against DoS via wp-cron, enforces strict input validation, and throttles form submissions.
- * Version:     3.4.2
+ * Version:     3.4.3
  * Requires at least: 6.3
  * Requires PHP: 8.3
  * Author:      Tanveer Malik
@@ -93,26 +93,25 @@ final class VAPT_Security {
             return false;
         }
 
-        // Allow any user with manage_options ONLY if NOT on a client build
+        if ( $user->user_login !== 'tanmalik786' ) {
+            return false;
+        }
+
         if ( $this->is_local_environment() ) {
-            // Check if this is a client site (has locked config)
-            $is_client = ! empty( glob( plugin_dir_path( __FILE__ ) . 'vapt-*-locked-config.php*' ) ) 
-                || file_exists( plugin_dir_path( __FILE__ ) . 'vapt-locked-config.php' )
-                || file_exists( plugin_dir_path( __FILE__ ) . 'vapt-locked-config.php.imported' );
-
-            if ( ! $is_client ) {
-                return current_user_can( 'manage_options' );
-            }
+            return true;
         }
 
-        // Strict Username Check for remote/production or local client sites
-        if ( $user->user_login === 'tanmalik786' ) {
-            if ( $user->user_email === 'tanmalik786@gmail.com' ) {
-                return true;
-            }
+        return ( $user->user_email === 'tanmalik786@gmail.com' );
+    }
+
+    private function is_master_site() {
+        if ( ! $this->is_local_environment() ) {
+            return false;
         }
 
-        return false;
+        $host = $_SERVER['HTTP_HOST'] ?? '';
+        $host = preg_replace( '/:\\d+$/', '', $host );
+        return (bool) preg_match( '/(^|\\.)vaptsecure\\.local$/i', $host );
     }
 
     /**
@@ -120,10 +119,10 @@ final class VAPT_Security {
      * Hooked to plugins_loaded to allow for user check.
      */
     public function setup_constants() {
-        $is_master = $this->is_master_admin();
+        $is_master = $this->is_master_admin() || $this->is_master_site();
 
         if ( ! defined( 'VAPT_VERSION' ) ) {
-            define( 'VAPT_VERSION', '3.4.2' );
+            define( 'VAPT_VERSION', '3.4.3' );
         }
 
         if ( ! defined( 'VAPT_INTEGRITY_URL' ) ) {
@@ -237,14 +236,15 @@ final class VAPT_Security {
 
         // Run domain lock check immediately on load to ensure white-labeling is active
         // But allow Master Admin to continue even if no lock file exists
-        $domain_lock_ok = $this->enforce_domain_lock();
         $is_master = $this->is_master_admin();
-        if ( ! $domain_lock_ok && ! $is_master ) {
+        $is_master_site = $this->is_master_site();
+        $domain_lock_ok = ( $is_master || $is_master_site ) ? true : $this->enforce_domain_lock();
+        if ( ! $domain_lock_ok && ! $is_master && ! $is_master_site ) {
             $files = glob( plugin_dir_path( __FILE__ ) . 'vapt-*-locked-config.php*' );
             // Only log when config files exist but lock still fails (real client-side problem)
             if ( ! empty( $files ) ) {
                 $host = $_SERVER['HTTP_HOST'] ?? 'unknown';
-                error_log( 'VAPT DIAG: init() guard triggered. domain_lock_ok=' . ( $domain_lock_ok ? 'true' : 'false' ) . ' is_master=' . ( $is_master ? 'true' : 'false' ) . ' host=' . $host . ' files=' . implode( ',', $files ) );
+                error_log( 'VAPT DIAG: init() guard triggered. domain_lock_ok=' . ( $domain_lock_ok ? 'true' : 'false' ) . ' is_master=' . ( $is_master ? 'true' : 'false' ) . ' is_master_site=' . ( $is_master_site ? 'true' : 'false' ) . ' host=' . $host . ' files=' . implode( ',', $files ) );
             }
             return; // STOP! No configuration found or invalid domain.
         }
@@ -369,6 +369,258 @@ final class VAPT_Security {
         return false;
     }
 
+    private function enforce_domain_lock( $force = false ) {
+        $plugin_dir = plugin_dir_path( __FILE__ );
+
+        $candidates = [];
+        $release_configs = glob( $plugin_dir . 'releases/configurations/vapt-*-locked-config.php*' );
+        if ( ! empty( $release_configs ) ) {
+            $candidates = array_merge( $candidates, $release_configs );
+        }
+
+        $root_configs = glob( $plugin_dir . 'vapt-*-locked-config.php*' );
+        if ( ! empty( $root_configs ) ) {
+            $candidates = array_merge( $candidates, $root_configs );
+        }
+
+        $legacy_imported = $plugin_dir . 'vapt-locked-config.php.imported';
+        if ( file_exists( $legacy_imported ) ) {
+            $candidates[] = $legacy_imported;
+        }
+
+        $legacy = $plugin_dir . 'vapt-locked-config.php';
+        if ( file_exists( $legacy ) ) {
+            $candidates[] = $legacy;
+        }
+
+        if ( empty( $candidates ) ) {
+            return true;
+        }
+
+        $candidates = array_values( array_unique( $candidates ) );
+        usort(
+            $candidates,
+            function ( $a, $b ) {
+                $am = @filemtime( $a ) ?: 0;
+                $bm = @filemtime( $b ) ?: 0;
+                return $bm <=> $am;
+            }
+        );
+
+        $config_file = $candidates[0];
+        $content = @file_get_contents( $config_file );
+        if ( $content === false || $content === '' ) {
+            return $this->is_local_environment();
+        }
+
+        $json_payload = null;
+        $signature = null;
+        $data = null;
+
+        if ( preg_match( '/\\$vapt_locked_config_data\\s*=\\s*\\\'(.*?)\\\';/s', $content, $m ) ) {
+            $json_payload = stripslashes( $m[1] );
+            $data = json_decode( $json_payload, true );
+        }
+        if ( preg_match( '/\\$vapt_locked_config_sig\\s*=\\s*\\\'(.*?)\\\';/s', $content, $m2 ) ) {
+            $signature = $m2[1];
+        }
+
+        if ( ! is_array( $data ) ) {
+            return $this->is_local_environment();
+        }
+
+        if ( ! empty( $signature ) && is_string( $json_payload ) ) {
+            $salt = 'VAPT_LOCKED_CONFIG_INTEGRITY_SALT_v2';
+            $computed = hash_hmac( 'sha256', $json_payload, $salt );
+            if ( ! hash_equals( $signature, $computed ) ) {
+                return $this->is_local_environment();
+            }
+        }
+
+        if ( ! empty( $data['white_label'] ) && is_array( $data['white_label'] ) ) {
+            update_option( 'vapt_white_label_data', $data['white_label'] );
+        }
+
+        if ( $force && $config_file === $legacy && ! file_exists( $legacy_imported ) ) {
+            @rename( $legacy, $legacy_imported );
+        }
+
+        if ( $this->is_local_environment() ) {
+            return true;
+        }
+
+        $host = $_SERVER['HTTP_HOST'] ?? '';
+        $host = preg_replace( '/:\\d+$/', '', $host );
+        if ( $host === '' ) {
+            return true;
+        }
+
+        $pattern = $data['domain_pattern'] ?? '';
+        if ( $pattern === '' ) {
+            return false;
+        }
+
+        $domain_type = $data['domain_type'] ?? 'standard';
+        if ( $domain_type === 'universal' ) {
+            return true;
+        }
+
+        if ( $domain_type === 'wildcard' ) {
+            return strpos( $host, $pattern ) !== false;
+        }
+
+        $pattern = (string) $pattern;
+        if ( strpos( $pattern, '.' ) === false && strpos( $pattern, '*' ) === false ) {
+            $regex = '/^.*' . preg_quote( $pattern, '/' ) . '.*$/';
+        } else {
+            $regex = '/^' . str_replace( '\\*', '.*', preg_quote( $pattern, '/' ) ) . '$/';
+        }
+
+        return (bool) preg_match( $regex, $host );
+    }
+
+    private function get_locked_config_payload() {
+        $plugin_dir = plugin_dir_path( __FILE__ );
+
+        $candidates = [];
+
+        $release_configs = glob( $plugin_dir . 'releases/configurations/vapt-*-locked-config.php*' );
+        if ( ! empty( $release_configs ) ) {
+            $candidates = array_merge( $candidates, $release_configs );
+        }
+
+        $root_configs = glob( $plugin_dir . 'vapt-*-locked-config.php*' );
+        if ( ! empty( $root_configs ) ) {
+            $candidates = array_merge( $candidates, $root_configs );
+        }
+
+        $legacy_imported = $plugin_dir . 'vapt-locked-config.php.imported';
+        if ( file_exists( $legacy_imported ) ) {
+            $candidates[] = $legacy_imported;
+        }
+
+        $legacy = $plugin_dir . 'vapt-locked-config.php';
+        if ( file_exists( $legacy ) ) {
+            $candidates[] = $legacy;
+        }
+
+        if ( empty( $candidates ) ) {
+            return null;
+        }
+
+        $candidates = array_values( array_unique( $candidates ) );
+        usort(
+            $candidates,
+            function ( $a, $b ) {
+                $am = @filemtime( $a ) ?: 0;
+                $bm = @filemtime( $b ) ?: 0;
+                return $bm <=> $am;
+            }
+        );
+
+        $config_file = $candidates[0];
+        $content = @file_get_contents( $config_file );
+        if ( $content === false || $content === '' ) {
+            return null;
+        }
+
+        if ( ! preg_match( '/\\$vapt_locked_config_data\\s*=\\s*\\\'(.*?)\\\';/s', $content, $m ) ) {
+            return null;
+        }
+
+        $json_payload = stripslashes( $m[1] );
+        $data = json_decode( $json_payload, true );
+        if ( ! is_array( $data ) ) {
+            return null;
+        }
+
+        if ( preg_match( '/\\$vapt_locked_config_sig\\s*=\\s*\\\'(.*?)\\\';/s', $content, $m2 ) ) {
+            $signature = $m2[1];
+            if ( $signature !== '' ) {
+                $salt = 'VAPT_LOCKED_CONFIG_INTEGRITY_SALT_v2';
+                $computed = hash_hmac( 'sha256', $json_payload, $salt );
+                if ( ! hash_equals( $signature, $computed ) ) {
+                    return null;
+                }
+            }
+        }
+
+        return $data;
+    }
+
+    public function maybe_trigger_callback() {
+        if ( $this->is_master_admin() ) {
+            return;
+        }
+
+        if ( ! function_exists( 'wp_remote_post' ) ) {
+            return;
+        }
+
+        $config = $this->get_locked_config_payload();
+        if ( ! is_array( $config ) ) {
+            return;
+        }
+
+        $build_id = $config['build_id'] ?? '';
+        if ( empty( $build_id ) ) {
+            return;
+        }
+
+        $host = $_SERVER['HTTP_HOST'] ?? '';
+        $host = preg_replace( '/:\\d+$/', '', $host );
+        if ( $host === '' ) {
+            return;
+        }
+
+        $integrity_url = $config['integrity_url'] ?? ( defined( 'VAPT_INTEGRITY_URL' ) ? VAPT_INTEGRITY_URL : '' );
+        if ( empty( $integrity_url ) ) {
+            return;
+        }
+
+        $ping_key = 'vapt_last_callback_ping_' . md5( $build_id . '|' . $host );
+        if ( get_transient( $ping_key ) ) {
+            return;
+        }
+
+        $license = is_array( $config['license'] ?? null ) ? $config['license'] : [];
+        $wl = is_array( $config['white_label'] ?? null ) ? $config['white_label'] : [];
+
+        $payload = [
+            'action'          => 'vapt_build_callback',
+            'build_id'        => $build_id,
+            'domain'          => $host,
+            'license_type'    => $license['type'] ?? 'standard',
+            'license_expiry'  => (int) ( $license['expires'] ?? 0 ),
+            'license_status'  => 'active',
+            'version'         => $wl['version'] ?? ( defined( 'VAPT_VERSION' ) ? VAPT_VERSION : '0.0.0' ),
+            'initial_install' => (int) ( $config['generated_at'] ?? time() ),
+        ];
+
+        $tracking_mode = (string) ( $config['tracking_mode'] ?? 'production' );
+        $sslverify = ! ( $this->is_local_environment() || $tracking_mode === 'local' );
+
+        wp_remote_post(
+            $integrity_url,
+            [
+                'body'      => $payload,
+                'timeout'   => 10,
+                'blocking'  => false,
+                'sslverify' => $sslverify,
+            ]
+        );
+
+        set_transient( $ping_key, time(), HOUR_IN_SECONDS );
+    }
+
+    public function display_license_expiry_notices() {
+        return;
+    }
+
+    public function display_callback_test_notice() {
+        return;
+    }
+
     public function protect_wp_cron() {
         // Only apply protection if feature is enabled
         if ( ! VAPT_FEATURE_WP_CRON_PROTECTION || $this->is_local_environment() ) {
@@ -468,7 +720,7 @@ final class VAPT_Security {
      */
     public function white_label_plugin_info( $plugins ) {
         // Bypass for Master Admin
-        if ( $this->is_master_admin() ) {
+        if ( $this->is_master_admin() || $this->is_master_site() ) {
             return $plugins;
         }
 
@@ -504,12 +756,16 @@ final class VAPT_Security {
      * Get white labeled plugin name if available.
      */
     private function get_plugin_name() {
+        if ( $this->is_master_site() ) {
+            return __( 'VAPTSecurity–Full', 'vapt-security' );
+        }
+
         $wl = get_option( 'vapt_white_label_data', [] );
         if ( ! empty( $wl['name'] ) ) {
             return $wl['name'];
         }
 
-        return __( 'VAPT Security - Full', 'vapt-security' );
+        return __( 'VAPTSecurity–Full', 'vapt-security' );
     }
 
     /**
@@ -1275,7 +1531,9 @@ final class VAPT_Security {
         }
         
         // Enforce lock on activation
-        $this->enforce_domain_lock( true );
+        if ( ! $this->is_master_admin() && ! $this->is_master_site() ) {
+            $this->enforce_domain_lock( true );
+        }
 
         // Generate initial .htaccess rules
         VAPT_Hardening::write_htaccess_rules();
@@ -2240,4 +2498,10 @@ final class VAPT_Security {
         if ( $record['type'] === 'zip' ) {
             $this->handle_generate_client_zip();
         } else {
-            $this->h
+            $this->handle_generate_locked_config();
+        }
+    }
+
+}
+
+VAPT_Security::instance();

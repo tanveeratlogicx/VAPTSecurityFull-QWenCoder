@@ -26,7 +26,7 @@ class VAPT_Hardening {
         if ( VAPT_Features::is_enabled( 'xmlrpc_protection' ) ) {
             add_filter( 'xmlrpc_enabled', '__return_false' );
             add_action( 'init', [ $this, 'block_xmlrpc_access' ] );
-            add_action( 'wp_head', [ $this, 'remove_pingback_header' ] );
+            add_filter( 'wp_headers', [ $this, 'filter_wp_headers' ] );
             remove_action( 'wp_head', 'rsd_link' );
         }
 
@@ -117,7 +117,23 @@ class VAPT_Hardening {
      * V#3 Remove Pingback header
      */
     public function remove_pingback_header() {
+        if ( headers_sent() ) {
+            return;
+        }
+
         header_remove( 'X-Pingback' );
+    }
+
+    public function filter_wp_headers( $headers ) {
+        if ( isset( $headers['X-Pingback'] ) ) {
+            unset( $headers['X-Pingback'] );
+        }
+
+        if ( isset( $headers['x-pingback'] ) ) {
+            unset( $headers['x-pingback'] );
+        }
+
+        return $headers;
     }
 
     /**

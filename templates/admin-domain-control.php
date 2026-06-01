@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 // Superadmin Domain Control Page
 // Check transient auth
 $user_id = get_current_user_id();
@@ -1127,7 +1127,7 @@ $csv_names = [
                                      <?php echo $activation_date; ?>
                                  </td>
                                  <td style="font-size: 11px; color: #666; width: 80px;">
-                                     <?php echo $t['license']['auto_renew'] ? esc_html__( 'Yes', 'vapt-security' ) : esc_html__( 'No', 'vapt-security' ); ?>
+                                     <?php echo ! empty( $t['license']['auto_renew'] ) ? esc_html__( 'Yes', 'vapt-security' ) : esc_html__( 'No', 'vapt-security' ); ?>
                                  </td>
                                  <td style="font-size: 11px; color: #666; width: 90px;">
                                      <?php echo esc_html( $t['license']['renewal_count'] ?? 0 ); ?>
