@@ -9,7 +9,7 @@ $license = VAPT_License::get_license();
 $license_type = $license['type'] ?? 'standard';
 $license_expires = $license['expires'] ?? 0;
 $license_auto_renew = $license['auto_renew'] ?? false;
-$expiry_date = $license_expires ? date_i18n( get_option( 'date_format' ), $license_expires ) : __( 'Never', 'vapt-security' );
+$expiry_date = $license_expires ? wp_date( get_option( 'date_format' ), $license_expires, wp_timezone() ) : __( 'Never', 'vapt-security' );
 
 // Get Active Features
 $features = VAPT_Features::get_active_features();
@@ -18,11 +18,11 @@ $all_features = VAPT_Features::get_defined_features();
 // Pre-calculate future expiries for JS
 $base_time = ! empty( $license['start'] ) ? $license['start'] : time();
 $future_expiries = [
-    'standard' => date_i18n( get_option( 'date_format' ), $base_time + ( 30 * DAY_IN_SECONDS ) ),
-    'pro'      => date_i18n( get_option( 'date_format' ), $base_time + ( 365 * DAY_IN_SECONDS ) ),
+    'standard' => wp_date( get_option( 'date_format' ), $base_time + ( 30 * DAY_IN_SECONDS ), wp_timezone() ),
+    'pro'      => wp_date( get_option( 'date_format' ), $base_time + ( 365 * DAY_IN_SECONDS ), wp_timezone() ),
     'developer' => __( 'Never', 'vapt-security' ),
-    'trial' => date_i18n( get_option( 'date_format' ), $base_time + ( 7 * DAY_IN_SECONDS ) ),
-    'demo'  => date_i18n( get_option( 'date_format' ), $base_time + ( 15 * DAY_IN_SECONDS ) ),
+    'trial' => wp_date( get_option( 'date_format' ), $base_time + ( 7 * DAY_IN_SECONDS ), wp_timezone() ),
+    'demo'  => wp_date( get_option( 'date_format' ), $base_time + ( 15 * DAY_IN_SECONDS ), wp_timezone() ),
 ];
 
 $csv_names = [
@@ -540,6 +540,87 @@ $csv_names = [
     #vapt-tab-tracking .vapt-history-table th {
         padding: 6px 5px;
     }
+    #vapt-tab-tracking .vapt-vtabs {
+        display: flex;
+        gap: 18px;
+        align-items: flex-start;
+    }
+    #vapt-tab-tracking .vapt-vtabs-nav {
+        width: 230px;
+        flex: 0 0 230px;
+        background: #f6f7f7;
+        border: 1px solid #dcdcde;
+        border-radius: 10px;
+        padding: 10px;
+    }
+    #vapt-tab-tracking .vapt-vtabs-nav a {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 12px;
+        border-radius: 8px;
+        text-decoration: none;
+        color: #1d2327;
+        border: 1px solid transparent;
+        background: transparent;
+    }
+    #vapt-tab-tracking .vapt-vtabs-nav a:hover {
+        background: #fff;
+    }
+    #vapt-tab-tracking .vapt-vtabs-nav a.active {
+        background: #fff;
+        border-color: #dcdcde;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+        font-weight: 600;
+    }
+    #vapt-tab-tracking .vapt-vtab-panel {
+        display: none;
+    }
+    #vapt-tab-tracking .vapt-vtab-panel.active {
+        display: block;
+    }
+    #vapt-tab-tracking .vapt-attempts-info {
+        color: #2271b1;
+        cursor: pointer;
+        margin-left: 6px;
+        vertical-align: middle;
+    }
+    #vapt-tab-tracking .vapt-attempts-info:hover {
+        color: #135e96;
+    }
+    #vapt-tab-tracking .vapt-attempts-count {
+        display: inline-block;
+        margin-left: 8px;
+        padding: 2px 8px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 600;
+        line-height: 16px;
+        border: 1px solid transparent;
+    }
+    #vapt-tab-tracking .vapt-attempts-count.vapt-attempts-ok {
+        background: #edfaef;
+        border-color: #b7e2c1;
+        color: #008a20;
+    }
+    #vapt-tab-tracking .vapt-attempts-count.vapt-attempts-warn {
+        background: #fff8e5;
+        border-color: #f2c86a;
+        color: #9a6a00;
+    }
+    #vapt-tab-tracking .vapt-next-exec-eta {
+        color: #646970;
+        font-size: 12px;
+        margin-left: 6px;
+        font-family: monospace;
+        white-space: nowrap;
+    }
+    #vapt-tab-tracking .vapt-next-exec-eta.vapt-clickable {
+        cursor: pointer;
+        text-decoration: underline;
+        text-decoration-style: dotted;
+        text-underline-offset: 2px;
+    }
 </style>
 <div id="vapt-notice-container"></div>
 
@@ -933,7 +1014,7 @@ $csv_names = [
                                                      if ( empty($build['expires']) || $build['license'] === 'developer' ) {
                                                          echo esc_html__( 'Never', 'vapt-security' );
                                                      } else {
-                                                         echo esc_html( date_i18n( get_option( 'date_format' ), $build['expires'] ) );
+                                                        echo esc_html( wp_date( get_option( 'date_format' ), $build['expires'], wp_timezone() ) );
                                                      }
                                                  ?>
                                              </td>
@@ -1018,145 +1099,111 @@ $csv_names = [
                     </div>
                 </div>
 
-                <!-- Callback Test Result Panel -->
-                <div id="vapt-callback-result" style="display:none; margin-bottom: 20px; border-radius: 6px; overflow: hidden; border: 1px solid #e0e0e0; font-size: 13px;">
-                    <div id="vapt-callback-result-header" style="padding: 12px 16px; font-weight: 700; display:flex; align-items:center; gap:8px;">
-                        <span id="vapt-callback-result-icon" style="font-size:18px;"></span>
-                        <span id="vapt-callback-result-title"></span>
+                <div class="vapt-vtabs">
+                    <div class="vapt-vtabs-nav">
+                        <a href="#" class="vapt-tracking-vtab active" data-vtab="monitor">
+                            <span class="dashicons dashicons-visibility"></span>
+                            <?php esc_html_e( 'Installation Monitor', 'vapt-security' ); ?>
+                        </a>
+                        <a href="#" class="vapt-tracking-vtab" data-vtab="queue">
+                            <span class="dashicons dashicons-schedule"></span>
+                            <?php esc_html_e( 'Queued Request', 'vapt-security' ); ?>
+                        </a>
                     </div>
-                    <div style="padding: 14px 16px; background: #fafafa; border-top: 1px solid #e0e0e0;">
-                        <table style="width:100%; border-collapse:collapse; font-size:12px; font-family:monospace;">
-                            <tr><td style="padding:3px 12px 3px 0; color:#646970; white-space:nowrap; font-family:sans-serif;"><?php esc_html_e( 'Target URL', 'vapt-security' ); ?></td><td id="vcr-url" style="padding:3px 0; word-break:break-all;"></td></tr>
-                            <tr><td style="padding:3px 12px 3px 0; color:#646970; white-space:nowrap; font-family:sans-serif;"><?php esc_html_e( 'Tracking Mode', 'vapt-security' ); ?></td><td id="vcr-mode" style="padding:3px 0;"></td></tr>
-                            <tr><td style="padding:3px 12px 3px 0; color:#646970; white-space:nowrap; font-family:sans-serif;"><?php esc_html_e( 'Build ID', 'vapt-security' ); ?></td><td id="vcr-build-id" style="padding:3px 0;"></td></tr>
-                            <tr><td style="padding:3px 12px 3px 0; color:#646970; white-space:nowrap; font-family:sans-serif;"><?php esc_html_e( 'HTTP Status', 'vapt-security' ); ?></td><td id="vcr-status" style="padding:3px 0;"></td></tr>
-                            <tr><td style="padding:3px 12px 3px 0; color:#646970; white-space:nowrap; font-family:sans-serif;"><?php esc_html_e( 'SSL Verify', 'vapt-security' ); ?></td><td id="vcr-ssl" style="padding:3px 0;"></td></tr>
-                        </table>
-                        <div style="margin-top:10px;">
-                            <div style="font-size:11px; color:#646970; margin-bottom:4px; font-family:sans-serif;"><?php esc_html_e( 'Raw Response', 'vapt-security' ); ?></div>
-                            <pre id="vcr-body" style="margin:0; padding:8px; background:#fff; border:1px solid #e0e0e0; border-radius:4px; font-size:11px; max-height:120px; overflow:auto; white-space:pre-wrap; word-break:break-all;"></pre>
+
+                    <div style="flex: 1;">
+                        <div id="vapt-tracking-panel-monitor" class="vapt-vtab-panel active">
+                            <div id="vapt-callback-result" style="display:none; margin-bottom: 20px; border-radius: 6px; overflow: hidden; border: 1px solid #e0e0e0; font-size: 13px;">
+                                <div id="vapt-callback-result-header" style="padding: 12px 16px; font-weight: 700; display:flex; align-items:center; gap:8px;">
+                                    <span id="vapt-callback-result-icon" style="font-size:18px;"></span>
+                                    <span id="vapt-callback-result-title"></span>
+                                </div>
+                                <div style="padding: 14px 16px; background: #fafafa; border-top: 1px solid #e0e0e0;">
+                                    <table style="width:100%; border-collapse:collapse; font-size:12px; font-family:monospace;">
+                                        <tr><td style="padding:3px 12px 3px 0; color:#646970; white-space:nowrap; font-family:sans-serif;"><?php esc_html_e( 'Target URL', 'vapt-security' ); ?></td><td id="vcr-url" style="padding:3px 0; word-break:break-all;"></td></tr>
+                                        <tr><td style="padding:3px 12px 3px 0; color:#646970; white-space:nowrap; font-family:sans-serif;"><?php esc_html_e( 'Tracking Mode', 'vapt-security' ); ?></td><td id="vcr-mode" style="padding:3px 0;"></td></tr>
+                                        <tr><td style="padding:3px 12px 3px 0; color:#646970; white-space:nowrap; font-family:sans-serif;"><?php esc_html_e( 'Build ID', 'vapt-security' ); ?></td><td id="vcr-build-id" style="padding:3px 0;"></td></tr>
+                                        <tr><td style="padding:3px 12px 3px 0; color:#646970; white-space:nowrap; font-family:sans-serif;"><?php esc_html_e( 'HTTP Status', 'vapt-security' ); ?></td><td id="vcr-status" style="padding:3px 0;"></td></tr>
+                                        <tr><td style="padding:3px 12px 3px 0; color:#646970; white-space:nowrap; font-family:sans-serif;"><?php esc_html_e( 'SSL Verify', 'vapt-security' ); ?></td><td id="vcr-ssl" style="padding:3px 0;"></td></tr>
+                                    </table>
+                                    <div style="margin-top:10px;">
+                                        <div style="font-size:11px; color:#646970; margin-bottom:4px; font-family:sans-serif;"><?php esc_html_e( 'Raw Response', 'vapt-security' ); ?></div>
+                                        <pre id="vcr-body" style="margin:0; padding:8px; background:#fff; border:1px solid #e0e0e0; border-radius:4px; font-size:11px; max-height:120px; overflow:auto; white-space:pre-wrap; word-break:break-all;"></pre>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div style="margin-bottom: 10px;">
+                                <button id="vapt-ping-selected" class="button" disabled>
+                                    <span class="dashicons dashicons-update" style="margin-top:4px;"></span> <?php esc_html_e( 'Ping Selected', 'vapt-security' ); ?>
+                                </button>
+                            </div>
+
+                            <table id="vapt-tracking-table" class="vapt-history-table" style="margin-top: 20px;">
+                                <thead>
+                                    <tr>
+                                         <th style="width: 20px;"><?php esc_html_e( '#', 'vapt-security' ); ?></th>
+                                         <th style="width: 20px;"><input type="checkbox" id="vapt-select-all-tracking"></th>
+                                         <th><?php esc_html_e( 'Build ID', 'vapt-security' ); ?></th>
+                                         <th><?php esc_html_e( 'Plugin Name', 'vapt-security' ); ?></th>
+                                         <th><?php esc_html_e( 'Domain / IP', 'vapt-security' ); ?></th>
+                                         <th><?php esc_html_e( 'License', 'vapt-security' ); ?></th>
+                                         <th><?php esc_html_e( 'Status', 'vapt-security' ); ?></th>
+                                         <th><?php esc_html_e( 'Install', 'vapt-security' ); ?></th>
+                                         <th><?php esc_html_e( 'Activation', 'vapt-security' ); ?></th>
+                                         <th><?php esc_html_e( 'Auto-Renew', 'vapt-security' ); ?></th>
+                                         <th><?php esc_html_e( 'Terms Renewed', 'vapt-security' ); ?></th>
+                                         <th><?php esc_html_e( 'Expiry', 'vapt-security' ); ?></th>
+                                         <th><?php esc_html_e( 'Last Seen', 'vapt-security' ); ?></th>
+                                         <th><?php esc_html_e( 'Actions', 'vapt-security' ); ?></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr><td colspan="14" style="text-align:center; padding: 30px; color: #999;"><?php esc_html_e( 'Loading...', 'vapt-security' ); ?></td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div id="vapt-tracking-panel-queue" class="vapt-vtab-panel">
+                            <div style="margin-top: 2px; margin-bottom: 10px;">
+                                <h3 style="margin: 0 0 6px 0;"><?php esc_html_e( 'Queued Requests', 'vapt-security' ); ?></h3>
+                                <p class="description" style="margin: 0;"><?php esc_html_e( 'Requests waiting to be delivered on the next client check-in. Next execution time is estimated from the last heartbeat.', 'vapt-security' ); ?></p>
+                            </div>
+
+                            <?php
+                                $vapt_auto_pause_seconds = absint( get_option( 'vapt_auto_pause_overdue_seconds', defined( 'VAPT_AUTO_PAUSE_OVERDUE_SECONDS' ) ? VAPT_AUTO_PAUSE_OVERDUE_SECONDS : ( 20 * MINUTE_IN_SECONDS ) ) );
+                                if ( $vapt_auto_pause_seconds < 60 ) $vapt_auto_pause_seconds = 60;
+                                $vapt_auto_pause_minutes = (int) max( 1, round( $vapt_auto_pause_seconds / 60 ) );
+                            ?>
+                            <div style="display:flex; align-items:center; gap:10px; padding:10px 12px; background:#f6f7f7; border:1px solid #dcdcde; border-radius:8px; margin-top: 10px;">
+                                <div style="font-weight:600; font-size:12px;"><?php esc_html_e( 'Auto-Pause Window', 'vapt-security' ); ?></div>
+                                <label style="display:flex; align-items:center; gap:8px; font-size:12px; color:#1d2327;">
+                                    <?php esc_html_e( 'Pause after', 'vapt-security' ); ?>
+                                    <input type="number" id="vapt-auto-pause-minutes" min="1" step="1" value="<?php echo esc_attr( (string) $vapt_auto_pause_minutes ); ?>" style="width:90px;">
+                                    <?php esc_html_e( 'minutes overdue', 'vapt-security' ); ?>
+                                </label>
+                                <button type="button" class="button" id="vapt-save-auto-pause-window"><?php esc_html_e( 'Save', 'vapt-security' ); ?></button>
+                                <span style="color:#646970; font-size:12px;"><?php esc_html_e( 'Auto-resumes when the client checks in again.', 'vapt-security' ); ?></span>
+                            </div>
+
+                            <table id="vapt-queued-requests-table" class="vapt-history-table" style="margin-top: 16px;">
+                                <thead>
+                                    <tr>
+                                        <th><?php esc_html_e( 'Build ID', 'vapt-security' ); ?></th>
+                                        <th><?php esc_html_e( 'Domain', 'vapt-security' ); ?></th>
+                                        <th><?php esc_html_e( 'Requests', 'vapt-security' ); ?></th>
+                                        <th><?php esc_html_e( 'Queued At', 'vapt-security' ); ?></th>
+                                        <th><?php esc_html_e( 'Last Execution Result', 'vapt-security' ); ?></th>
+                                        <th><?php esc_html_e( 'Next Execution', 'vapt-security' ); ?></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr><td colspan="6" style="text-align:center; padding: 30px; color: #999;"><?php esc_html_e( 'Loading...', 'vapt-security' ); ?></td></tr>
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 </div>
-
-                <div style="margin-bottom: 10px;">
-                    <button id="vapt-ping-selected" class="button" disabled>
-                        <span class="dashicons dashicons-update" style="margin-top:4px;"></span> <?php esc_html_e( 'Ping Selected', 'vapt-security' ); ?>
-                    </button>
-                </div>
-
-                <table class="vapt-history-table" style="margin-top: 20px;">
-                    <thead>
-                        <tr>
-                             <th style="width: 20px;"><?php esc_html_e( '#', 'vapt-security' ); ?></th>
-                             <th style="width: 20px;"><input type="checkbox" id="vapt-select-all-tracking"></th>
-                             <th><?php esc_html_e( 'Build ID', 'vapt-security' ); ?></th>
-                             <th><?php esc_html_e( 'Plugin Name', 'vapt-security' ); ?></th>
-                             <th><?php esc_html_e( 'Domain / IP', 'vapt-security' ); ?></th>
-                             <th><?php esc_html_e( 'License', 'vapt-security' ); ?></th>
-                             <th><?php esc_html_e( 'Status', 'vapt-security' ); ?></th>
-                             <th><?php esc_html_e( 'Install', 'vapt-security' ); ?></th>
-                             <th><?php esc_html_e( 'Activation', 'vapt-security' ); ?></th>
-                             <th><?php esc_html_e( 'Auto-Renew', 'vapt-security' ); ?></th>
-                             <th><?php esc_html_e( 'Terms Renewed', 'vapt-security' ); ?></th>
-                             <th><?php esc_html_e( 'Expiry', 'vapt-security' ); ?></th>
-                             <th><?php esc_html_e( 'Last Seen', 'vapt-security' ); ?></th>
-                             <th><?php esc_html_e( 'Actions', 'vapt-security' ); ?></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php 
-                        $tracking = get_option( 'vapt_build_tracking', [] );
-                        $build_history = get_option( 'vapt_build_history', [] );
-                        $build_versions = [];
-                        $build_names = [];
-                        foreach ( $build_history as $b ) {
-                            $build_versions[ $b['id'] ] = $b['version'] ?? '';
-                            $build_names[ $b['id'] ] = $b['name'] ?? '';
-                        }
-                         if ( empty( $tracking ) ) : ?>
-                             <tr><td colspan="14" style="text-align:center; padding: 40px; color: #999;"><?php esc_html_e( 'No active tracking data received yet.', 'vapt-security' ); ?></td></tr>
-                        <?php else : 
-                            $row_num = 0;
-                            foreach ( array_reverse($tracking) as $bid => $t ) : 
-                                $row_num++;
-                                $is_online = (time() - $t['last_seen'] < 24 * HOUR_IN_SECONDS);
-                                $datetime_format = get_option( 'date_format' ) . ' ' . get_option( 'time_format' );
-                                $install_date = !empty($t['initial_install']) ? date_i18n( $datetime_format, $t['initial_install'] ) : 'N/A';
-                                $activation_date = date_i18n( $datetime_format, $t['first_activation'] );
-                                $expiry_date = !empty($t['license']['expiry']) ? date_i18n( $datetime_format, $t['license']['expiry'] ) : 'Never';
-                                $build_version = $build_versions[$bid] ?? $t['version'] ?? '';
-                                $build_label = $build_names[$bid] ?? '';
-                                $row_bg = $row_num % 2 === 0 ? ' background: #f8f9fa;' : '';
-                        ?>
-                            <tr style="<?php echo $row_bg; ?>">
-                                <td style="text-align:center; color: #888;"><?php echo $row_num; ?></td>
-                                <td style="text-align:center;"><input type="checkbox" class="vapt-tracking-checkbox" value="<?php echo esc_attr($bid); ?>"></td>
-                                <td>
-                                    <span class="vapt-build-id"><?php echo esc_html($bid); ?></span>
-                                    <?php if ( ! empty( $build_version ) ) : ?>
-                                        <span style="color: #999; font-size: 10px;"> / v<?php echo esc_html($build_version); ?></span>
-                                    <?php endif; ?>
-                                </td>
-                                <td style="font-size: 11px;">
-                                    <?php echo ! empty( $build_label ) ? esc_html( $build_label ) : '<span style="color: #999;">—</span>'; ?>
-                                </td>
-                                <td>
-                                    <strong><?php echo esc_html($t['domain']); ?></strong>
-                                    <?php if ( ! empty( $t['ip'] ) ) : ?>
-                                        <span style="color: #999; font-weight: 400;"> / <?php echo esc_html($t['ip']); ?></span>
-                                    <?php endif; ?>
-                                </td>
-                                <td>
-                                    <span class="badge" style="background: #2271b1; color:#fff; padding: 2px 8px; border-radius:10px; font-size:10px;">
-                                        <?php echo esc_html(strtoupper($t['license']['type'])); ?>
-                                    </span>
-                                    <span style="font-size: 10px; color: <?php echo ($t['license']['status'] === 'active') ? '#008a20' : '#d63638'; ?>; margin-left: 4px;">
-                                        <?php echo esc_html($t['license']['status']); ?>
-                                    </span>
-                                </td>
-                                <td>
-                                    <span class="vapt-feature-status" style="background: <?php echo $is_online ? '#edfaef' : '#fcf0f1'; ?>; color: <?php echo $is_online ? '#008a20' : '#d63638'; ?>;">
-                                        <?php echo $is_online ? 'ONLINE' : 'OFFLINE'; ?>
-                                    </span>
-                                </td>
-                                 <td style="font-size: 11px;">
-                                     <?php echo $install_date; ?>
-                                 </td>
-                                 <td style="font-size: 11px;">
-                                     <?php echo $activation_date; ?>
-                                 </td>
-                                 <td style="font-size: 11px; color: #666; width: 80px;">
-                                     <?php echo ! empty( $t['license']['auto_renew'] ) ? esc_html__( 'Yes', 'vapt-security' ) : esc_html__( 'No', 'vapt-security' ); ?>
-                                 </td>
-                                 <td style="font-size: 11px; color: #666; width: 90px;">
-                                     <?php echo esc_html( $t['license']['renewal_count'] ?? 0 ); ?>
-                                 </td>
-                                 <td style="font-size: 11px;">
-                                     <?php echo $expiry_date; ?>
-                                 </td>
-                                <td style="font-size: 11px;">
-                                    <?php echo human_time_diff( $t['last_seen'], time() ); ?> ago
-                                </td>
-                                <td>
-                                    <button type="button" class="button button-small vapt-refresh-build" 
-                                        data-id="<?php echo esc_attr($bid); ?>"
-                                        title="<?php esc_attr_e( 'Refresh Status', 'vapt-security' ); ?>">
-                                        <span class="dashicons dashicons-update" style="font-size: 16px; margin-top: 3px;"></span>
-                                    </button>
-                                    <button type="button" class="button button-small vapt-manage-build" 
-                                        data-id="<?php echo esc_attr($bid); ?>" 
-                                        data-domain="<?php echo esc_attr($t['domain']); ?>"
-                                        data-expiry="<?php echo esc_attr($t['license']['expiry']); ?>"
-                                        data-type="<?php echo esc_attr($t['license']['type']); ?>"
-                                        title="<?php esc_attr_e( 'Manage Deployment', 'vapt-security' ); ?>">
-                                        <span class="dashicons dashicons-admin-settings" style="font-size: 16px; margin-top: 3px;"></span>
-                                    </button>
-                                </td>
-                            </tr>
-                        <?php endforeach; endif; ?>
-                    </tbody>
-                </table>
             </div>
         </div>
 
@@ -1393,6 +1440,11 @@ jQuery(document).ready(function($) {
             
             // Persist tab state without cluttering URL
             sessionStorage.setItem('vapt_active_tab', tabId);
+
+            if (tabId === 'tracking') {
+                vaptRefreshTrackingTable();
+                vaptRefreshQueuedRequestsTable();
+            }
         });
 
         // Persistence on reload
@@ -2139,17 +2191,306 @@ jQuery(document).ready(function($) {
     var vaptPostPingCount = 0;
     var vaptPostPingMax = 12; // 12 * 5s = 60s max
 
+    function vaptSetTrackingVTab(tab) {
+        $('.vapt-tracking-vtab').removeClass('active');
+        $('.vapt-tracking-vtab[data-vtab="' + tab + '"]').addClass('active');
+
+        $('#vapt-tracking-panel-monitor').removeClass('active');
+        $('#vapt-tracking-panel-queue').removeClass('active');
+
+        if (tab === 'queue') {
+            $('#vapt-tracking-panel-queue').addClass('active');
+            vaptRefreshQueuedRequestsTable();
+        } else {
+            $('#vapt-tracking-panel-monitor').addClass('active');
+            vaptRefreshTrackingTable();
+        }
+
+        sessionStorage.setItem('vapt_tracking_vtab', tab);
+    }
+
+    $(document).on('click', '.vapt-tracking-vtab', function(e) {
+        e.preventDefault();
+        vaptSetTrackingVTab($(this).data('vtab'));
+    });
+
+    $(document).on('click', '#vapt-save-auto-pause-window', function(e) {
+        e.preventDefault();
+        var btn = $(this);
+        var minutes = parseInt($('#vapt-auto-pause-minutes').val() || '0', 10);
+        if (!minutes || minutes < 1) {
+            vaptNotify.error('Error', 'Minutes must be at least 1.');
+            return;
+        }
+
+        btn.prop('disabled', true);
+        $.post(ajaxurl, {
+            action: 'vapt_set_auto_pause_window',
+            nonce: vaptTrackingNonce,
+            minutes: minutes
+        }, function(r) {
+            btn.prop('disabled', false);
+            if (r && r.success) {
+                vaptNotify.success('Saved', (r.data && r.data.message) ? r.data.message : 'Saved');
+                vaptRefreshQueuedRequestsTable();
+            } else {
+                vaptNotify.error('Error', (r && r.data && r.data.message) ? r.data.message : 'Failed');
+            }
+        }).fail(function() {
+            btn.prop('disabled', false);
+            vaptNotify.error('Error', 'AJAX request failed.');
+        });
+    });
+
+    var savedTrackingVTab = sessionStorage.getItem('vapt_tracking_vtab');
+    if (savedTrackingVTab) {
+        vaptSetTrackingVTab(savedTrackingVTab);
+    }
+
     function vaptRefreshTrackingTable(callback) {
         $.post(ajaxurl, {
             action: 'vapt_get_tracking_table',
             nonce: vaptTrackingNonce
         }, function(r) {
             if (r.success && r.data.html) {
-                $('#vapt-tab-tracking .vapt-history-table tbody').html(r.data.html);
+                $('#vapt-tracking-table tbody').html(r.data.html);
             }
             if (typeof callback === 'function') callback(r);
         });
     }
+
+    function vaptRefreshQueuedRequestsTable(callback) {
+        $.post(ajaxurl, {
+            action: 'vapt_get_queued_requests_table',
+            nonce: vaptTrackingNonce
+        }, function(r) {
+            if (r.success && r.data.html) {
+                $('#vapt-queued-requests-table tbody').html(r.data.html);
+                $('#vapt-queued-requests-table .vapt-next-exec-eta').addClass('vapt-clickable');
+                vaptUpdateNextExecCountdowns();
+            }
+            if (typeof callback === 'function') callback(r);
+        });
+    }
+
+    function vaptFormatCountdown(seconds) {
+        seconds = Math.max(0, parseInt(seconds || 0, 10));
+        if (seconds <= 0) return 'now';
+        if (seconds < 60) return seconds + 's';
+        var mins = Math.floor(seconds / 60);
+        var secs = seconds % 60;
+        if (mins < 60) return mins + 'm ' + secs + 's';
+        var hours = Math.floor(mins / 60);
+        mins = mins % 60;
+        if (hours < 24) return hours + 'h ' + mins + 'm';
+        var days = Math.floor(hours / 24);
+        hours = hours % 24;
+        return days + 'd ' + hours + 'h';
+    }
+
+    function vaptUpdateNextExecCountdowns() {
+        if (document.hidden) return;
+        if (!$('#vapt-tab-tracking').is(':visible')) return;
+
+        var now = Math.floor(Date.now() / 1000);
+        $('#vapt-queued-requests-table .vapt-next-exec-eta').each(function() {
+            var el = $(this);
+            var ts = parseInt(el.data('next-ts') || 0, 10);
+            if (String(el.data('paused') || '0') === '1') return;
+            if (!ts) return;
+            var diff = ts - now;
+            if (diff > 0) {
+                el.text('(in ' + vaptFormatCountdown(diff) + ')');
+            } else if (diff === 0) {
+                el.text('(now)');
+            } else {
+                el.text('(overdue ' + vaptFormatCountdown(Math.abs(diff)) + ')');
+            }
+        });
+    }
+
+    function vaptSetQueuePaused(buildId, paused, reason) {
+        var action = paused ? 'vapt_pause_build_queue' : 'vapt_resume_build_queue';
+        var payload = {
+            action: action,
+            build_id: buildId,
+            nonce: vaptTrackingNonce
+        };
+        if (paused && reason) payload.reason = reason;
+
+        return $.post(ajaxurl, payload);
+    }
+
+    function vaptShowQueueDecisionModal(buildId, details, paused) {
+        details = details || [];
+        details.sort(function(a, b) {
+            var at = parseInt(a.ts || 0, 10);
+            var bt = parseInt(b.ts || 0, 10);
+            return bt - at;
+        });
+
+        var top = details[0] || {};
+        var summary = top.message ? $('<div>').text(top.message).html() : 'No additional details available.';
+        var reason = '';
+        if (top.type === 'OVERDUE') reason = 'Client has not checked in when expected (estimate).';
+        else if (top.type === 'DELIVERY') reason = 'Client checked in, but did not acknowledge results.';
+        else if (top.type === 'PAUSED') reason = 'Attempts are currently paused.';
+
+        var actionBtn = paused
+            ? '<button class="button button-primary vapt-queue-resume">Continue Attempting</button>'
+            : '<button class="button vapt-queue-pause">Pause Attempts</button>';
+
+        var overlay = $(`
+            <div class="vapt-modal-overlay">
+                <div class="vapt-modal" style="max-width: 720px;">
+                    <div class="vapt-modal-header" style="display:flex; justify-content:space-between; align-items:center;">
+                        <div>
+                            <h2 style="margin:0;">Queue Status</h2>
+                            <div style="margin-top:4px; color:rgba(255,255,255,0.75); font-size:12px;">Build ID: <span style="font-family:monospace;">${buildId}</span></div>
+                        </div>
+                        <button type="button" class="vapt-modal-close" style="position:static;">&times;</button>
+                    </div>
+                    <div class="vapt-modal-body">
+                        <div style="padding:10px 12px; border:1px solid #dcdcde; border-radius:8px; background:#fff;">
+                            <div style="font-weight:600; margin-bottom:6px;">Reason</div>
+                            <div style="color:#1d2327;">${reason}</div>
+                            <div style="margin-top:8px; color:#646970;">${summary}</div>
+                        </div>
+                        <div style="margin-top:14px;">
+                            <div style="font-weight:600; margin-bottom:8px;">Details (latest first)</div>
+                            <div id="vapt-queue-details"></div>
+                        </div>
+                    </div>
+                    <div class="vapt-modal-footer" style="display:flex; justify-content:flex-end; gap:10px;">
+                        <button class="button vapt-cancel">Close</button>
+                        ${actionBtn}
+                    </div>
+                </div>
+            </div>
+        `);
+
+        var detailsHtml = '';
+        if (!details.length) {
+            detailsHtml = '<div style="color:#646970;">No details available.</div>';
+        } else {
+            detailsHtml = '<div style="display:flex; flex-direction:column; gap:10px;">' + details.map(function(d) {
+                var when = d.when || '';
+                var type = d.type || '';
+                var msg  = d.message || '';
+                return '<div style="padding:10px 12px; border:1px solid #dcdcde; border-radius:8px; background:#fff;">' +
+                    '<div style="display:flex; justify-content:space-between; gap:12px; align-items:flex-start;">' +
+                        '<div style="font-weight:600; color:#d63638;">' + $('<div>').text(type || 'INFO').html() + '</div>' +
+                        '<div style="font-size:12px; color:#646970; white-space:nowrap;">' + $('<div>').text(when).html() + '</div>' +
+                    '</div>' +
+                    '<div style="margin-top:6px; color:#1d2327;">' + $('<div>').text(msg).html() + '</div>' +
+                '</div>';
+            }).join('') + '</div>';
+        }
+
+        $('body').append(overlay);
+        overlay.find('#vapt-queue-details').html(detailsHtml);
+
+        function close() { overlay.remove(); }
+        overlay.find('.vapt-modal-close, .vapt-cancel').on('click', close);
+        overlay.on('click', function(e) { if (e.target === overlay[0]) close(); });
+
+        overlay.find('.vapt-queue-pause').on('click', function() {
+            vaptSetQueuePaused(buildId, true, reason).done(function(r) {
+                if (r && r.success) {
+                    vaptNotify.info('Paused', r.data.message || 'Paused');
+                    close();
+                    vaptRefreshQueuedRequestsTable();
+                } else {
+                    vaptNotify.error('Error', (r && r.data && r.data.message) ? r.data.message : 'Failed');
+                }
+            }).fail(function() {
+                vaptNotify.error('Error', 'AJAX request failed.');
+            });
+        });
+
+        overlay.find('.vapt-queue-resume').on('click', function() {
+            vaptSetQueuePaused(buildId, false).done(function(r) {
+                if (r && r.success) {
+                    vaptNotify.success('Resumed', r.data.message || 'Resumed');
+                    close();
+                    vaptRefreshQueuedRequestsTable();
+                } else {
+                    vaptNotify.error('Error', (r && r.data && r.data.message) ? r.data.message : 'Failed');
+                }
+            }).fail(function() {
+                vaptNotify.error('Error', 'AJAX request failed.');
+            });
+        });
+    }
+
+    function vaptShowAttemptsDetailsModal(bid, details) {
+        details = details || [];
+        details.sort(function(a, b) {
+            var at = parseInt(a.ts || 0, 10);
+            var bt = parseInt(b.ts || 0, 10);
+            return bt - at;
+        });
+
+        var listHtml = '';
+        if (!details.length) {
+            listHtml = '<div style="color:#646970;">No details available.</div>';
+        } else {
+            listHtml = '<div style="display:flex; flex-direction:column; gap:10px;">' + details.map(function(d) {
+                var when = d.when || '';
+                var type = d.type || '';
+                var msg  = d.message || '';
+                return '<div style="padding:10px 12px; border:1px solid #dcdcde; border-radius:8px; background:#fff;">' +
+                    '<div style="display:flex; justify-content:space-between; gap:12px; align-items:flex-start;">' +
+                        '<div style="font-weight:600; color:#d63638;">FAIL' + (type ? (' • ' + type) : '') + '</div>' +
+                        '<div style="font-size:12px; color:#646970; white-space:nowrap;">' + when + '</div>' +
+                    '</div>' +
+                    '<div style="margin-top:6px; color:#1d2327;">' + $('<div>').text(msg).html() + '</div>' +
+                '</div>';
+            }).join('') + '</div>';
+        }
+
+        var overlay = $(`
+            <div class="vapt-modal-overlay">
+                <div class="vapt-modal" style="max-width: 720px;">
+                    <div class="vapt-modal-header" style="display:flex; justify-content:space-between; align-items:center;">
+                        <div>
+                            <h2 style="margin:0;">Attempt Details</h2>
+                            <div style="margin-top:4px; color:rgba(255,255,255,0.75); font-size:12px;">Build ID: <span style="font-family:monospace;">${bid}</span></div>
+                        </div>
+                        <button type="button" class="vapt-modal-close" style="position:static;">&times;</button>
+                    </div>
+                    <div class="vapt-modal-body">${listHtml}</div>
+                </div>
+            </div>
+        `);
+
+        $('body').append(overlay);
+        overlay.find('.vapt-modal-close').on('click', function() { overlay.remove(); });
+        overlay.on('click', function(e) { if (e.target === overlay[0]) overlay.remove(); });
+    }
+
+    $(document).on('click', '.vapt-attempts-info', function(e) {
+        e.preventDefault();
+        var el = $(this);
+        var bid = el.data('bid') || '';
+        var raw = el.attr('data-details') || '[]';
+        var details = [];
+        try { details = JSON.parse(raw); } catch (err) { details = []; }
+        vaptShowAttemptsDetailsModal(bid, details);
+    });
+
+    $(document).on('click', '#vapt-queued-requests-table .vapt-next-exec-eta', function(e) {
+        e.preventDefault();
+        var el = $(this);
+        var bid = el.data('bid') || '';
+        var raw = el.attr('data-details') || '[]';
+        var paused = String(el.data('paused') || '0') === '1';
+        var details = [];
+        try { details = JSON.parse(raw); } catch (err) { details = []; }
+        vaptShowQueueDecisionModal(bid, details, paused);
+    });
+
+    setInterval(vaptUpdateNextExecCountdowns, 1000);
 
     function vaptStartPostPingRefresh() {
         vaptPostPingCount = 0;
@@ -2157,6 +2498,7 @@ jQuery(document).ready(function($) {
         vaptPostPingTimer = setInterval(function() {
             vaptPostPingCount++;
             vaptRefreshTrackingTable();
+            vaptRefreshQueuedRequestsTable();
             if (vaptPostPingCount >= vaptPostPingMax) {
                 clearInterval(vaptPostPingTimer);
                 vaptPostPingTimer = null;
@@ -2241,6 +2583,7 @@ jQuery(document).ready(function($) {
     setInterval(function() {
         if (!document.hidden && $('#vapt-tab-tracking').is(':visible')) {
             vaptRefreshTrackingTable();
+            vaptRefreshQueuedRequestsTable();
         }
     }, 6 * 60 * 60 * 1000);
 

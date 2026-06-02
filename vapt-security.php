@@ -129,6 +129,16 @@ final class VAPT_Security {
             define( 'VAPT_INTEGRITY_URL', 'https://vaptsecure.net/vapts' );
         }
 
+        if ( ! defined( 'VAPT_TRACKING_INTERVAL_LOCAL' ) ) {
+            define( 'VAPT_TRACKING_INTERVAL_LOCAL', 60 );
+        }
+        if ( ! defined( 'VAPT_TRACKING_INTERVAL_DEFAULT' ) ) {
+            define( 'VAPT_TRACKING_INTERVAL_DEFAULT', 12 * HOUR_IN_SECONDS );
+        }
+        if ( ! defined( 'VAPT_AUTO_PAUSE_OVERDUE_SECONDS' ) ) {
+            define( 'VAPT_AUTO_PAUSE_OVERDUE_SECONDS', 20 * MINUTE_IN_SECONDS );
+        }
+
         // Load configuration file if it exists and NOT Master Admin
         // Master Admin bypasses the client-specific config file to see the "Master Build"
         if ( ! $is_master ) {
@@ -196,6 +206,7 @@ final class VAPT_Security {
         add_filter( 'all_plugins', [ $this, 'white_label_plugin_info' ] );
         add_action( 'wp_ajax_nopriv_vapt_form_submit', [ $this, 'handle_form_submission' ] );
         add_action( 'wp_ajax_vapt_form_submit', [ $this, 'handle_form_submission' ] );
+        add_action( 'init', [ $this, 'maybe_trigger_callback' ], 30 );
         
         // OTP AJAX
         add_action( 'wp_ajax_vapt_send_otp', [ $this, 'handle_send_otp' ] );
@@ -227,6 +238,10 @@ final class VAPT_Security {
         add_action( 'wp_ajax_vapt_set_callback_test', [ $this, 'handle_set_callback_test' ] );
         add_action( 'wp_ajax_vapt_refresh_build_status', [ $this, 'handle_refresh_build_status' ] );
         add_action( 'wp_ajax_vapt_get_tracking_table', [ $this, 'handle_get_tracking_table' ] );
+        add_action( 'wp_ajax_vapt_get_queued_requests_table', [ $this, 'handle_get_queued_requests_table' ] );
+        add_action( 'wp_ajax_vapt_pause_build_queue', [ $this, 'handle_pause_build_queue' ] );
+        add_action( 'wp_ajax_vapt_resume_build_queue', [ $this, 'handle_resume_build_queue' ] );
+        add_action( 'wp_ajax_vapt_set_auto_pause_window', [ $this, 'handle_set_auto_pause_window' ] );
 
         add_action( 'init', [ $this, 'initialize_security_logging' ] );
         add_action( 'vapt_cleanup_event', [ $this, 'cleanup_old_data' ] );
@@ -548,8 +563,142 @@ final class VAPT_Security {
         return $data;
     }
 
-    public function maybe_trigger_callback() {
+    private function vapt_normalize_command_results( $raw ) {
+        if ( $raw === null || $raw === '' ) {
+            return [];
+        }
+
+        if ( is_string( $raw ) ) {
+            $decoded = json_decode( wp_unslash( $raw ), true );
+            return is_array( $decoded ) ? $decoded : [];
+        }
+
+        return is_array( $raw ) ? $raw : [];
+    }
+
+    private function vapt_append_ack_log( string $build_id, array $results ): void {
+        if ( $build_id === '' || empty( $results ) ) {
+            return;
+        }
+
+        $log = get_option( 'vapt_command_ack_log', [] );
+        if ( ! is_array( $log ) ) {
+            $log = [];
+        }
+        if ( ! isset( $log[ $build_id ] ) || ! is_array( $log[ $build_id ] ) ) {
+            $log[ $build_id ] = [];
+        }
+
+        foreach ( $results as $r ) {
+            if ( ! is_array( $r ) ) continue;
+            $log[ $build_id ][] = [
+                'type'    => sanitize_text_field( (string) ( $r['type'] ?? '' ) ),
+                'ok'      => ! empty( $r['ok'] ),
+                'message' => sanitize_text_field( (string) ( $r['message'] ?? '' ) ),
+                'ts'      => (int) ( $r['ts'] ?? time() ),
+            ];
+        }
+
+        if ( count( $log[ $build_id ] ) > 30 ) {
+            $log[ $build_id ] = array_slice( $log[ $build_id ], -30 );
+        }
+
+        update_option( 'vapt_command_ack_log', $log, false );
+    }
+
+    private function vapt_get_queue_pause_info( string $build_id ): array {
+        if ( $build_id === '' ) return false;
+        $paused = get_option( 'vapt_paused_build_queues', [] );
+        if ( ! is_array( $paused ) ) return [];
+        $row = is_array( $paused[ $build_id ] ?? null ) ? $paused[ $build_id ] : [];
+        if ( empty( $row['paused'] ) ) return [];
+        return $row;
+    }
+
+    private function vapt_set_queue_paused( string $build_id, bool $paused, string $reason = '', string $mode = 'manual' ): void {
+        if ( $build_id === '' ) return;
+        $opt = get_option( 'vapt_paused_build_queues', [] );
+        if ( ! is_array( $opt ) ) $opt = [];
+        if ( $paused ) {
+            $opt[ $build_id ] = [
+                'paused'    => true,
+                'paused_at' => time(),
+                'reason'    => sanitize_text_field( $reason ),
+                'mode'      => sanitize_text_field( $mode ),
+            ];
+        } else {
+            unset( $opt[ $build_id ] );
+        }
+        update_option( 'vapt_paused_build_queues', $opt, false );
+    }
+
+    private function vapt_get_auto_pause_overdue_seconds(): int {
+        $default = defined( 'VAPT_AUTO_PAUSE_OVERDUE_SECONDS' ) ? (int) VAPT_AUTO_PAUSE_OVERDUE_SECONDS : ( 20 * MINUTE_IN_SECONDS );
+        $val = absint( get_option( 'vapt_auto_pause_overdue_seconds', 0 ) );
+        if ( $val <= 0 ) {
+            $val = $default;
+        }
+        if ( $val < 60 ) {
+            $val = 60;
+        }
+        if ( $val > ( 30 * DAY_IN_SECONDS ) ) {
+            $val = 30 * DAY_IN_SECONDS;
+        }
+        return (int) $val;
+    }
+
+    private function vapt_store_outbox_results( array $results ): void {
+        if ( empty( $results ) ) {
+            return;
+        }
+        update_option( 'vapt_command_results_outbox', $results, false );
+    }
+
+    private function vapt_process_remote_commands( array $commands, array $config ): void {
+        $results = [];
+        foreach ( $commands as $cmd ) {
+            if ( ! is_array( $cmd ) ) {
+                continue;
+            }
+            $type = sanitize_text_field( (string) ( $cmd['type'] ?? '' ) );
+            if ( $type === '' ) {
+                continue;
+            }
+
+            if ( $type === 'FORCE_CHECKIN' ) {
+                $results[] = [
+                    'type'    => $type,
+                    'ok'      => true,
+                    'message' => 'Force check-in requested',
+                    'ts'      => time(),
+                ];
+
+                $host = $_SERVER['HTTP_HOST'] ?? '';
+                $host = preg_replace( '/:\\d+$/', '', $host );
+                $build_id = (string) ( $config['build_id'] ?? '' );
+                if ( $host !== '' && $build_id !== '' ) {
+                    $ping_key = 'vapt_last_callback_ping_' . md5( $build_id . '|' . $host );
+                    delete_transient( $ping_key );
+                }
+                continue;
+            }
+
+            $results[] = [
+                'type'    => $type,
+                'ok'      => false,
+                'message' => 'Unknown command',
+                'ts'      => time(),
+            ];
+        }
+
+        $this->vapt_store_outbox_results( $results );
+    }
+
+    public function maybe_trigger_callback( bool $force = false, bool $process_commands = true ) {
         if ( $this->is_master_admin() ) {
+            return;
+        }
+        if ( $this->is_master_site() ) {
             return;
         }
 
@@ -579,7 +728,7 @@ final class VAPT_Security {
         }
 
         $ping_key = 'vapt_last_callback_ping_' . md5( $build_id . '|' . $host );
-        if ( get_transient( $ping_key ) ) {
+        if ( ! $force && get_transient( $ping_key ) ) {
             return;
         }
 
@@ -597,20 +746,189 @@ final class VAPT_Security {
             'initial_install' => (int) ( $config['generated_at'] ?? time() ),
         ];
 
+        $outbox = get_option( 'vapt_command_results_outbox', [] );
+        if ( is_array( $outbox ) && ! empty( $outbox ) ) {
+            $payload['command_results'] = wp_json_encode( $outbox );
+        }
+
         $tracking_mode = (string) ( $config['tracking_mode'] ?? 'production' );
         $sslverify = ! ( $this->is_local_environment() || $tracking_mode === 'local' );
+        if ( ! is_admin() ) {
+            $process_commands = false;
+        }
 
-        wp_remote_post(
+        $resp = wp_remote_post(
             $integrity_url,
             [
                 'body'      => $payload,
-                'timeout'   => 10,
-                'blocking'  => false,
+                'timeout'   => 6,
+                'blocking'  => $process_commands,
                 'sslverify' => $sslverify,
             ]
         );
 
-        set_transient( $ping_key, time(), HOUR_IN_SECONDS );
+        $ttl = ( $tracking_mode === 'local' ) ? VAPT_TRACKING_INTERVAL_LOCAL : VAPT_TRACKING_INTERVAL_DEFAULT;
+        set_transient( $ping_key, time(), $ttl );
+        if ( ! $process_commands ) {
+            return;
+        }
+        if ( is_wp_error( $resp ) ) {
+            return;
+        }
+        if ( isset( $payload['command_results'] ) ) {
+            delete_option( 'vapt_command_results_outbox' );
+        }
+
+        $body = wp_remote_retrieve_body( $resp );
+        if ( ! is_string( $body ) || $body === '' ) {
+            return;
+        }
+
+        $json = json_decode( $body, true );
+        if ( ! is_array( $json ) || empty( $json['success'] ) ) {
+            return;
+        }
+
+        $data = is_array( $json['data'] ?? null ) ? $json['data'] : [];
+        $commands = $data['commands'] ?? [];
+        if ( is_array( $commands ) && ! empty( $commands ) ) {
+            $this->vapt_process_remote_commands( $commands, $config );
+        }
+    }
+
+    public function handle_build_callback() {
+        $build_id = sanitize_text_field( (string) ( $_POST['build_id'] ?? '' ) );
+        if ( $build_id === '' ) {
+            wp_send_json_error( [ 'message' => 'Missing build_id' ], 400 );
+        }
+
+        $domain = sanitize_text_field( (string) ( $_POST['domain'] ?? '' ) );
+        if ( $domain === '' ) {
+            $domain = sanitize_text_field( (string) ( $_SERVER['HTTP_HOST'] ?? '' ) );
+        }
+
+        $ip = sanitize_text_field( (string) ( $_SERVER['REMOTE_ADDR'] ?? '' ) );
+        $license_type   = sanitize_text_field( (string) ( $_POST['license_type'] ?? 'standard' ) );
+        $license_expiry = absint( $_POST['license_expiry'] ?? 0 );
+        $license_status = sanitize_text_field( (string) ( $_POST['license_status'] ?? '' ) );
+        $version        = sanitize_text_field( (string) ( $_POST['version'] ?? '' ) );
+        $initial_install = absint( $_POST['initial_install'] ?? 0 );
+
+        $tracking = get_option( 'vapt_build_tracking', [] );
+        if ( ! is_array( $tracking ) ) {
+            $tracking = [];
+        }
+
+        $now = time();
+        $existing = is_array( $tracking[ $build_id ] ?? null ) ? $tracking[ $build_id ] : [];
+        $first_activation = isset( $existing['first_activation'] ) ? (int) $existing['first_activation'] : 0;
+        if ( ! $first_activation ) {
+            $first_activation = $now;
+        }
+
+        $tracking[ $build_id ] = [
+            'domain'          => $domain,
+            'ip'              => $ip,
+            'last_seen'       => $now,
+            'initial_install' => $initial_install ?: (int) ( $existing['initial_install'] ?? 0 ),
+            'first_activation'=> $first_activation,
+            'version'         => $version ?: (string) ( $existing['version'] ?? '' ),
+            'license'         => [
+                'type'          => $license_type,
+                'expiry'        => $license_expiry,
+                'status'        => $license_status !== '' ? $license_status : 'active',
+                'auto_renew'    => ! empty( $existing['license']['auto_renew'] ) ? 1 : 0,
+                'renewal_count' => (int) ( $existing['license']['renewal_count'] ?? 0 ),
+            ],
+        ];
+
+        update_option( 'vapt_build_tracking', $tracking, false );
+
+        $results = $this->vapt_normalize_command_results( $_POST['command_results'] ?? null );
+        if ( ! empty( $results ) ) {
+            $this->vapt_append_ack_log( $build_id, $results );
+        }
+
+        $pending = get_option( 'vapt_pending_commands', [] );
+        if ( ! is_array( $pending ) ) {
+            $pending = [];
+        }
+
+        $commands = [];
+        if ( isset( $pending[ $build_id ] ) && is_array( $pending[ $build_id ] ) ) {
+            $commands = $pending[ $build_id ];
+        }
+
+        $pause_info = $this->vapt_get_queue_pause_info( $build_id );
+        if ( ! empty( $pause_info ) ) {
+            $mode = sanitize_text_field( (string) ( $pause_info['mode'] ?? '' ) );
+            if ( $mode === 'auto' ) {
+                $this->vapt_set_queue_paused( $build_id, false );
+            } else {
+                wp_send_json_success( [ 'commands' => [] ] );
+            }
+        }
+
+        if ( ! empty( $commands ) ) {
+            unset( $pending[ $build_id ] );
+            update_option( 'vapt_pending_commands', $pending, false );
+        }
+
+        wp_send_json_success( [ 'commands' => $commands ] );
+    }
+
+    public function handle_pause_build_queue() {
+        check_ajax_referer( 'vapt_locked_config', 'nonce' );
+        if ( ! $this->is_master_admin() ) {
+            wp_send_json_error( [ 'message' => 'Unauthorized' ], 403 );
+        }
+
+        $build_id = sanitize_text_field( (string) ( $_POST['build_id'] ?? '' ) );
+        if ( $build_id === '' ) {
+            wp_send_json_error( [ 'message' => 'Missing build_id' ], 400 );
+        }
+
+        $reason = sanitize_text_field( (string) ( $_POST['reason'] ?? '' ) );
+        $this->vapt_set_queue_paused( $build_id, true, $reason, 'manual' );
+        wp_send_json_success( [ 'message' => __( 'Attempts paused for this build.', 'vapt-security' ) ] );
+    }
+
+    public function handle_resume_build_queue() {
+        check_ajax_referer( 'vapt_locked_config', 'nonce' );
+        if ( ! $this->is_master_admin() ) {
+            wp_send_json_error( [ 'message' => 'Unauthorized' ], 403 );
+        }
+
+        $build_id = sanitize_text_field( (string) ( $_POST['build_id'] ?? '' ) );
+        if ( $build_id === '' ) {
+            wp_send_json_error( [ 'message' => 'Missing build_id' ], 400 );
+        }
+
+        $this->vapt_set_queue_paused( $build_id, false );
+        wp_send_json_success( [ 'message' => __( 'Attempts resumed for this build.', 'vapt-security' ) ] );
+    }
+
+    public function handle_set_auto_pause_window() {
+        check_ajax_referer( 'vapt_locked_config', 'nonce' );
+        if ( ! $this->is_master_admin() ) {
+            wp_send_json_error( [ 'message' => 'Unauthorized' ], 403 );
+        }
+
+        $minutes = absint( $_POST['minutes'] ?? 0 );
+        if ( $minutes < 1 ) {
+            wp_send_json_error( [ 'message' => __( 'Minutes must be at least 1.', 'vapt-security' ) ], 400 );
+        }
+        if ( $minutes > 43200 ) {
+            wp_send_json_error( [ 'message' => __( 'Minutes is too large.', 'vapt-security' ) ], 400 );
+        }
+
+        $seconds = $minutes * 60;
+        update_option( 'vapt_auto_pause_overdue_seconds', $seconds, false );
+        wp_send_json_success( [
+            'message' => __( 'Auto-pause window updated.', 'vapt-security' ),
+            'seconds' => $seconds,
+            'minutes' => $minutes,
+        ] );
     }
 
     public function display_license_expiry_notices() {
@@ -1803,7 +2121,7 @@ final class VAPT_Security {
 
         if ( VAPT_License::update_license( $type, $expires, $auto_renew ) ) {
             $license = VAPT_License::get_license();
-            $formatted = $license['expires'] ? date_i18n( get_option( 'date_format' ), $license['expires'] ) : __( 'Never', 'vapt-security' );
+            $formatted = $license['expires'] ? wp_date( get_option( 'date_format' ), $license['expires'], wp_timezone() ) : __( 'Never', 'vapt-security' );
             wp_send_json_success( [ 
                 'message' => __( 'License updated.', 'vapt-security' ),
                 'expires_formatted' => $formatted
@@ -1823,7 +2141,7 @@ final class VAPT_Security {
 
         if ( VAPT_License::renew() ) {
             $license = VAPT_License::get_license();
-            $formatted = $license['expires'] ? date_i18n( get_option( 'date_format' ), $license['expires'] ) : __( 'Never', 'vapt-security' );
+            $formatted = $license['expires'] ? wp_date( get_option( 'date_format' ), $license['expires'], wp_timezone() ) : __( 'Never', 'vapt-security' );
             wp_send_json_success( [ 
                 'message' => __( 'License renewed.', 'vapt-security' ),
                 'expires_formatted' => $formatted
@@ -1874,7 +2192,12 @@ final class VAPT_Security {
     }
 
     public function handle_refresh_build_status() {
-        check_ajax_referer( 'vapt_locked_config', 'nonce' );
+        // Verify nonce manually to prevent WordPress from dying with -1 on failure.
+        // check_ajax_referer() calls wp_die('-1') when nonce is invalid, making debugging impossible.
+        if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( $_POST['nonce'], 'vapt_locked_config' ) ) {
+            // translators: %s is the action name.
+            wp_send_json_error( [ 'message' => sprintf( __( 'Security verification failed for action "%s". Please refresh the page and try again.', 'vapt-security' ), 'vapt_refresh_build_status' ) ], 403 );
+        }
         if ( ! $this->is_master_admin() ) {
             wp_send_json_error( [ 'message' => 'Unauthorized' ], 403 );
         }
@@ -1925,7 +2248,7 @@ final class VAPT_Security {
                 continue;
             }
 
-            $pending[ $bid ][] = [ 'type' => 'FORCE_CHECKIN' ];
+            $pending[ $bid ][] = [ 'type' => 'FORCE_CHECKIN', 'queued_at' => time() ];
             $queued[]          = $bid;
         }
 
@@ -2000,9 +2323,9 @@ final class VAPT_Security {
                 $activation_ts = isset( $t['first_activation'] ) ? (int) $t['first_activation'] : 0;
                 $expiry_ts     = isset( $license['expiry'] ) ? (int) $license['expiry'] : 0;
 
-                $install_date    = $install_ts ? date_i18n( $datetime_format, $install_ts ) : 'N/A';
-                $activation_date = $activation_ts ? date_i18n( $datetime_format, $activation_ts ) : 'N/A';
-                $expiry_date     = $expiry_ts ? date_i18n( $datetime_format, $expiry_ts ) : __( 'Never', 'vapt-security' );
+                $install_date    = $install_ts ? wp_date( $datetime_format, $install_ts, wp_timezone() ) : 'N/A';
+                $activation_date = $activation_ts ? wp_date( $datetime_format, $activation_ts, wp_timezone() ) : 'N/A';
+                $expiry_date     = $expiry_ts ? wp_date( $datetime_format, $expiry_ts, wp_timezone() ) : __( 'Never', 'vapt-security' );
 
                 $build_version = $build_versions[ $bid ] ?? ( $t['version'] ?? '' );
                 $build_label   = $build_names[ $bid ] ?? '';
@@ -2069,6 +2392,235 @@ final class VAPT_Security {
                             <span class="dashicons dashicons-admin-settings" style="font-size: 16px; margin-top: 3px;"></span>
                         </button>
                     </td>
+                </tr>
+                <?php
+            }
+        }
+
+        $html = trim( (string) ob_get_clean() );
+        wp_send_json_success( [ 'html' => $html ] );
+    }
+
+    public function handle_get_queued_requests_table() {
+        check_ajax_referer( 'vapt_locked_config', 'nonce' );
+        if ( ! $this->is_master_admin() ) {
+            wp_send_json_error( [ 'message' => 'Unauthorized' ], 403 );
+        }
+
+        $pending = get_option( 'vapt_pending_commands', [] );
+        if ( ! is_array( $pending ) ) {
+            $pending = [];
+        }
+
+        $tracking = get_option( 'vapt_build_tracking', [] );
+        if ( ! is_array( $tracking ) ) {
+            $tracking = [];
+        }
+
+        $build_history = get_option( 'vapt_build_history', [] );
+        $build_meta    = [];
+        if ( is_array( $build_history ) ) {
+            foreach ( $build_history as $b ) {
+                if ( ! is_array( $b ) ) continue;
+                if ( empty( $b['id'] ) ) continue;
+                $build_meta[ $b['id'] ] = $b;
+            }
+        }
+
+        $rows  = [];
+        $dirty = false;
+        foreach ( $pending as $bid => $commands ) {
+            if ( ! is_array( $commands ) || empty( $commands ) ) continue;
+            foreach ( $commands as $k => $cmd ) {
+                if ( ! is_array( $cmd ) ) continue;
+                if ( empty( $cmd['queued_at'] ) ) {
+                    $pending[ $bid ][ $k ]['queued_at'] = time();
+                    $dirty = true;
+                }
+            }
+            $rows[] = [ 'bid' => (string) $bid, 'commands' => $commands ];
+        }
+
+        if ( $dirty ) {
+            update_option( 'vapt_pending_commands', $pending, false );
+        }
+
+        ob_start();
+
+        if ( empty( $rows ) ) {
+            ?>
+            <tr><td colspan="6" style="text-align:center; padding: 30px; color: #999;"><?php esc_html_e( 'No queued requests.', 'vapt-security' ); ?></td></tr>
+            <?php
+        } else {
+            $datetime_format = get_option( 'date_format' ) . ' ' . get_option( 'time_format' );
+            $now             = time();
+            $ack_log         = get_option( 'vapt_command_ack_log', [] );
+            if ( ! is_array( $ack_log ) ) {
+                $ack_log = [];
+            }
+
+            foreach ( $rows as $row ) {
+                $bid      = $row['bid'];
+                $commands = $row['commands'];
+
+                $t          = is_array( $tracking[ $bid ] ?? null ) ? $tracking[ $bid ] : [];
+                $domain      = (string) ( $t['domain'] ?? ( $build_meta[ $bid ]['domain'] ?? '' ) );
+                $last_seen   = isset( $t['last_seen'] ) ? (int) $t['last_seen'] : 0;
+                $mode        = (string) ( $build_meta[ $bid ]['tracking_mode'] ?? 'production' );
+                $interval = ( $mode === 'local' ) ? VAPT_TRACKING_INTERVAL_LOCAL : VAPT_TRACKING_INTERVAL_DEFAULT;
+                $auto_pause_window = $this->vapt_get_auto_pause_overdue_seconds();
+                $auto_pause_minutes = (int) max( 1, round( $auto_pause_window / 60 ) );
+
+                $next_ts = $last_seen ? ( $last_seen + $interval ) : 0;
+                $pause_info = $this->vapt_get_queue_pause_info( (string) $bid );
+                $is_paused = ! empty( $pause_info );
+                $paused_reason = sanitize_text_field( (string) ( $pause_info['reason'] ?? '' ) );
+                $paused_at = (int) ( $pause_info['paused_at'] ?? 0 );
+                $paused_mode = sanitize_text_field( (string) ( $pause_info['mode'] ?? '' ) );
+
+                if ( ! $is_paused && $next_ts && ( $now - $next_ts ) >= $auto_pause_window ) {
+                    $this->vapt_set_queue_paused(
+                        (string) $bid,
+                        true,
+                        'Auto-paused after ' . $auto_pause_minutes . ' minutes of inactivity (no client check-in).',
+                        'auto'
+                    );
+                    $pause_info = $this->vapt_get_queue_pause_info( (string) $bid );
+                    $is_paused = ! empty( $pause_info );
+                    $paused_reason = sanitize_text_field( (string) ( $pause_info['reason'] ?? '' ) );
+                    $paused_at = (int) ( $pause_info['paused_at'] ?? 0 );
+                    $paused_mode = sanitize_text_field( (string) ( $pause_info['mode'] ?? '' ) );
+                }
+
+                $types     = [];
+                $latest_ts = 0;
+                foreach ( $commands as $cmd ) {
+                    if ( ! is_array( $cmd ) ) continue;
+                    $type = (string) ( $cmd['type'] ?? '' );
+                    if ( $type !== '' ) {
+                        $types[] = $type;
+                    }
+                    $qa = isset( $cmd['queued_at'] ) ? (int) $cmd['queued_at'] : 0;
+                    if ( $qa > $latest_ts ) {
+                        $latest_ts = $qa;
+                    }
+                }
+
+                $types_str = ! empty( $types ) ? implode( ', ', array_unique( $types ) ) : '—';
+                $queued_at = $latest_ts ? wp_date( $datetime_format, $latest_ts, wp_timezone() ) : '—';
+
+                $last_result = '';
+                $ack_items = is_array( $ack_log[ $bid ] ?? null ) ? $ack_log[ $bid ] : [];
+                $ack_hit   = null;
+                if ( ! empty( $ack_items ) ) {
+                    foreach ( array_reverse( $ack_items ) as $a ) {
+                        if ( ! is_array( $a ) ) continue;
+                        $ats = (int) ( $a['ts'] ?? 0 );
+                        if ( $latest_ts && $ats && $ats < $latest_ts ) {
+                            continue;
+                        }
+                        $ack_hit = $a;
+                        break;
+                    }
+                }
+
+                if ( is_array( $ack_hit ) ) {
+                    $ok  = ! empty( $ack_hit['ok'] );
+                    $ts  = (int) ( $ack_hit['ts'] ?? 0 );
+                    $typ = sanitize_text_field( (string) ( $ack_hit['type'] ?? '' ) );
+                    $msg = sanitize_text_field( (string) ( $ack_hit['message'] ?? '' ) );
+
+                    $parts = [];
+                    $parts[] = $ok ? 'OK' : 'FAIL';
+                    if ( $typ !== '' ) $parts[] = $typ;
+                    if ( $msg !== '' ) $parts[] = '- ' . $msg;
+                    if ( $ts ) $parts[] = '@ ' . wp_date( $datetime_format, $ts, wp_timezone() );
+                    $last_result = implode( ' ', $parts );
+                } elseif ( ! $last_seen ) {
+                    $last_result = __( 'No check-in recorded', 'vapt-security' );
+                } else {
+                    $last_result = __( 'Pending', 'vapt-security' );
+                }
+
+                if ( $is_paused ) {
+                    $next_dt  = __( 'Paused', 'vapt-security' );
+                    $next_eta = '';
+                } elseif ( $next_ts ) {
+                    $next_dt = wp_date( $datetime_format, $next_ts, wp_timezone() );
+                    $next_eta = '(' . human_time_diff( $now, $next_ts ) . ')';
+                } else {
+                    $next_dt  = __( 'On next check-in', 'vapt-security' );
+                    $next_eta = '';
+                }
+
+                $fail_details = [];
+                $attempts = 0;
+                if ( $is_paused ) {
+                    $fail_details[] = [
+                        'ts'      => $paused_at ?: time(),
+                        'when'    => wp_date( $datetime_format, ( $paused_at ?: time() ), wp_timezone() ),
+                        'ok'      => false,
+                        'type'    => 'PAUSED',
+                        'message' => ( $paused_mode === 'auto' ? 'Auto: ' : '' ) . ( $paused_reason !== '' ? $paused_reason : 'Attempts are paused for this build.' ),
+                    ];
+                }
+                if ( ! $is_paused && $next_ts && $now > $next_ts ) {
+                    $fail_details[] = [
+                        'ts'      => $now,
+                        'when'    => wp_date( $datetime_format, $now, wp_timezone() ),
+                        'ok'      => false,
+                        'type'    => 'OVERDUE',
+                        'message' => 'No expected check-in yet. This is only an estimate (client must visit the site). Auto-pauses after ' . $auto_pause_minutes . ' minutes overdue.',
+                    ];
+                }
+                if ( $last_seen && $latest_ts && $last_seen >= $latest_ts ) {
+                    $attempts = 1;
+                    $fail_details[] = [
+                        'ts'      => $last_seen,
+                        'when'    => wp_date( $datetime_format, $last_seen, wp_timezone() ),
+                        'ok'      => false,
+                        'type'    => 'DELIVERY',
+                        'message' => 'Client checked in but did not acknowledge results. Client may be running an older build.',
+                    ];
+                }
+                if ( isset( $ack_log[ $bid ] ) && is_array( $ack_log[ $bid ] ) ) {
+                    foreach ( array_reverse( $ack_log[ $bid ] ) as $a ) {
+                        if ( ! is_array( $a ) ) continue;
+                        $ats = (int) ( $a['ts'] ?? 0 );
+                        if ( $latest_ts && $ats && $ats < $latest_ts ) continue;
+                        if ( ! empty( $a['ok'] ) ) continue;
+                        $attempts++;
+                        $fail_details[] = [
+                            'ts'      => $ats ?: time(),
+                            'when'    => wp_date( $datetime_format, ( $ats ?: time() ), wp_timezone() ),
+                            'ok'      => false,
+                            'type'    => sanitize_text_field( (string) ( $a['type'] ?? '' ) ),
+                            'message' => sanitize_text_field( (string) ( $a['message'] ?? '' ) ),
+                        ];
+                    }
+                }
+
+                $attempts_label = sprintf(
+                    _n( '%d attempt', '%d attempts', $attempts, 'vapt-security' ),
+                    $attempts
+                );
+                $attempts_class = ( $attempts >= 1 ) ? 'vapt-attempts-warn' : 'vapt-attempts-ok';
+                $eta_text = $is_paused ? '(paused)' : $next_eta;
+                $next_eta_html  = '<span class="vapt-next-exec-eta" data-bid="' . esc_attr( (string) $bid ) . '" data-next-ts="' . esc_attr( (string) $next_ts ) . '" data-details="' . esc_attr( wp_json_encode( $fail_details ) ) . '" data-paused="' . esc_attr( $is_paused ? '1' : '0' ) . '">' . esc_html( $eta_text ) . '</span>';
+                $attempts_html  = '<span class="vapt-attempts-count ' . esc_attr( $attempts_class ) . '" data-attempts="' . esc_attr( (string) $attempts ) . '">' . esc_html( $attempts_label ) . '</span>';
+                $next_html      = '<span class="vapt-next-exec">' . esc_html( (string) $next_dt ) . '</span> ' . $next_eta_html . ' ' . $attempts_html;
+                $attempts_icon = '';
+                if ( $attempts >= 1 || $is_paused ) {
+                    $attempts_icon = '<span class="dashicons dashicons-info-outline vapt-attempts-info" data-bid="' . esc_attr( (string) $bid ) . '" data-details="' . esc_attr( wp_json_encode( $fail_details ) ) . '" title="View attempt details"></span>';
+                }
+                ?>
+                <tr>
+                    <td><span class="vapt-build-id"><?php echo esc_html( $bid ); ?></span></td>
+                    <td><?php echo $domain !== '' ? esc_html( $domain ) : '<span style="color:#999;">—</span>'; ?></td>
+                    <td style="font-family: monospace; font-size: 12px;"><?php echo esc_html( $types_str ); ?> <span style="color:#666;">(<?php echo esc_html( (string) count( $commands ) ); ?>)</span></td>
+                    <td style="font-size: 12px;"><?php echo esc_html( (string) $queued_at ); ?></td>
+                    <td style="font-size: 12px;"><?php echo esc_html( (string) $last_result ); ?></td>
+                    <td style="font-size: 12px;"><?php echo $next_html; ?> <?php echo $attempts_icon; ?></td>
                 </tr>
                 <?php
             }
