@@ -647,6 +647,157 @@ final class VAPT_Security {
         return (int) $val;
     }
 
+    private function vapt_get_client_build_meta(): array {
+        $meta = get_option( 'vapt_client_build_meta', [] );
+        return is_array( $meta ) ? $meta : [];
+    }
+
+    private function vapt_set_client_build_meta( array $meta ): void {
+        update_option( 'vapt_client_build_meta', $meta, false );
+    }
+
+    private function vapt_maybe_init_client_timestamps( string $build_id ): array {
+        $now = time();
+
+        if ( $build_id === '' ) {
+            return [ 'install' => $now, 'activation' => $now ];
+        }
+
+        $meta = $this->vapt_get_client_build_meta();
+        $row  = is_array( $meta[ $build_id ] ?? null ) ? $meta[ $build_id ] : [];
+
+        $install_ts = absint( $row['install'] ?? 0 );
+        $activation_ts = absint( $row['activation'] ?? 0 );
+
+        $license = class_exists( 'VAPT_License' ) ? VAPT_License::get_license() : false;
+        $license_start = is_array( $license ) ? absint( $license['start'] ?? 0 ) : 0;
+
+        if ( $activation_ts <= 0 && $license_start > 0 ) {
+            $activation_ts = $license_start;
+        }
+        if ( $activation_ts <= 0 ) {
+            $activation_ts = $now;
+        }
+        if ( $install_ts <= 0 ) {
+            $install_ts = $activation_ts;
+        }
+
+        $legacy_install = absint( get_option( 'vapt_client_install_time', 0 ) );
+        $legacy_activation = absint( get_option( 'vapt_client_activation_time', 0 ) );
+        if ( $legacy_install > 0 && $install_ts <= 0 ) {
+            $install_ts = $legacy_install;
+        }
+        if ( $legacy_activation > 0 && $activation_ts <= 0 ) {
+            $activation_ts = $legacy_activation;
+        }
+
+        $meta[ $build_id ] = [
+            'install'    => $install_ts,
+            'activation' => $activation_ts,
+        ];
+        $this->vapt_set_client_build_meta( $meta );
+
+        return [ 'install' => $install_ts, 'activation' => $activation_ts ];
+    }
+
+    private function vapt_maybe_seed_client_license( array $config, string $build_id ): void {
+        if ( $this->is_master_admin() || $this->is_master_site() ) {
+            return;
+        }
+
+        if ( $build_id === '' ) {
+            return;
+        }
+
+        $seeded = get_option( 'vapt_license_seeded_builds', [] );
+        if ( ! is_array( $seeded ) ) {
+            $seeded = [];
+        }
+        if ( ! empty( $seeded[ $build_id ] ) ) {
+            return;
+        }
+
+        $cfg_lic = is_array( $config['license'] ?? null ) ? $config['license'] : [];
+        $type = sanitize_text_field( (string) ( $cfg_lic['type'] ?? '' ) );
+        if ( $type === '' ) {
+            return;
+        }
+
+        $times = $this->vapt_maybe_init_client_timestamps( $build_id );
+        $start = (int) ( $times['activation'] ?? time() );
+
+        $current = class_exists( 'VAPT_License' ) ? VAPT_License::get_license() : false;
+        if ( is_array( $current ) ) {
+            $current_type = sanitize_text_field( (string) ( $current['type'] ?? '' ) );
+            $current_start = absint( $current['start'] ?? 0 );
+            $current_expires = absint( $current['expires'] ?? 0 );
+            if ( $current_type === $type && $current_start > 0 && ( $type === 'developer' || $current_expires > 0 ) ) {
+                $seeded[ $build_id ] = 1;
+                update_option( 'vapt_license_seeded_builds', $seeded, false );
+                return;
+            }
+        }
+
+        $expires = 0;
+        if ( $type === 'standard' ) $expires = $start + ( 30 * DAY_IN_SECONDS );
+        elseif ( $type === 'pro' ) $expires = $start + ( 365 * DAY_IN_SECONDS );
+        elseif ( $type === 'trial' ) $expires = $start + ( 7 * DAY_IN_SECONDS );
+        elseif ( $type === 'demo' ) $expires = $start + ( 15 * DAY_IN_SECONDS );
+        else $expires = 0;
+
+        if ( class_exists( 'VAPT_License' ) ) {
+            update_option(
+                VAPT_License::OPTION_NAME,
+                [
+                    'type'          => $type,
+                    'start'         => $start,
+                    'expires'       => $expires,
+                    'auto_renew'    => ! empty( $cfg_lic['auto_renew'] ),
+                    'renewal_count' => absint( $cfg_lic['renewal_count'] ?? 0 ),
+                ],
+                false
+            );
+        }
+
+        $seeded[ $build_id ] = 1;
+        update_option( 'vapt_license_seeded_builds', $seeded, false );
+    }
+
+    private function vapt_parse_date_string_to_expiry_ts( string $date_str ): int {
+        $date_str = trim( $date_str );
+        if ( $date_str === '' ) return 0;
+
+        $tz = wp_timezone();
+
+        $candidates = [];
+        $wp_fmt = (string) get_option( 'date_format' );
+        if ( $wp_fmt !== '' ) {
+            $candidates[] = $wp_fmt;
+        }
+        $candidates[] = 'Y-m-d';
+        $candidates[] = 'd/m/Y';
+        $candidates[] = 'm/d/Y';
+        $candidates[] = 'd-m-Y';
+        $candidates[] = 'm-d-Y';
+        $candidates[] = 'd.m.Y';
+        $candidates[] = 'm.d.Y';
+
+        foreach ( $candidates as $fmt ) {
+            $dt = \DateTime::createFromFormat( '!' . $fmt, $date_str, $tz );
+            if ( $dt instanceof \DateTime ) {
+                $dt->setTime( 23, 59, 59 );
+                return (int) $dt->getTimestamp();
+            }
+        }
+
+        $ts = strtotime( $date_str );
+        if ( $ts ) {
+            return (int) $ts;
+        }
+
+        return 0;
+    }
+
     private function vapt_store_outbox_results( array $results ): void {
         if ( empty( $results ) ) {
             return;
@@ -683,6 +834,74 @@ final class VAPT_Security {
                 continue;
             }
 
+            if ( $type === 'EXTEND_LICENSE' ) {
+                $expiry = absint( $cmd['expiry'] ?? 0 );
+                if ( $expiry <= 0 ) {
+                    $results[] = [
+                        'type'    => $type,
+                        'ok'      => false,
+                        'message' => 'Missing expiry',
+                        'ts'      => time(),
+                    ];
+                    continue;
+                }
+
+                $current = VAPT_License::get_license();
+                $current_type = is_array( $current ) ? sanitize_text_field( (string) ( $current['type'] ?? '' ) ) : '';
+                if ( $current_type === '' ) {
+                    $cfg_lic = is_array( $config['license'] ?? null ) ? $config['license'] : [];
+                    $current_type = sanitize_text_field( (string) ( $cfg_lic['type'] ?? 'standard' ) );
+                }
+                if ( $current_type === '' ) {
+                    $current_type = 'standard';
+                }
+
+                $ok = VAPT_License::update_license( $current_type, $expiry, null );
+                $results[] = [
+                    'type'    => $type,
+                    'ok'      => (bool) $ok,
+                    'message' => $ok ? 'Expiry updated' : 'Failed to update expiry',
+                    'ts'      => time(),
+                ];
+                continue;
+            }
+
+            if ( $type === 'CHANGE_TYPE' ) {
+                $new_type = sanitize_text_field( (string) ( $cmd['license_type'] ?? '' ) );
+                if ( $new_type === '' ) {
+                    $results[] = [
+                        'type'    => $type,
+                        'ok'      => false,
+                        'message' => 'Missing license_type',
+                        'ts'      => time(),
+                    ];
+                    continue;
+                }
+
+                $start = time();
+                $expires = 0;
+                if ( $new_type === 'standard' ) $expires = $start + ( 30 * DAY_IN_SECONDS );
+                elseif ( $new_type === 'pro' ) $expires = $start + ( 365 * DAY_IN_SECONDS );
+                elseif ( $new_type === 'trial' ) $expires = $start + ( 7 * DAY_IN_SECONDS );
+                elseif ( $new_type === 'demo' ) $expires = $start + ( 15 * DAY_IN_SECONDS );
+                else $expires = 0;
+
+                $ok = VAPT_License::update_license( $new_type, $expires, null );
+                $lic = VAPT_License::get_license();
+                if ( is_array( $lic ) ) {
+                    $lic['start'] = $start;
+                    update_option( VAPT_License::OPTION_NAME, $lic );
+                }
+
+                $results[] = [
+                    'type'    => $type,
+                    'ok'      => (bool) $ok,
+                    'message' => $ok ? 'License type updated' : 'Failed to update license type',
+                    'ts'      => time(),
+                ];
+                continue;
+            }
+
             $results[] = [
                 'type'    => $type,
                 'ok'      => false,
@@ -716,6 +935,9 @@ final class VAPT_Security {
             return;
         }
 
+        $this->vapt_maybe_seed_client_license( $config, (string) $build_id );
+        $client_times = $this->vapt_maybe_init_client_timestamps( (string) $build_id );
+
         $host = $_SERVER['HTTP_HOST'] ?? '';
         $host = preg_replace( '/:\\d+$/', '', $host );
         if ( $host === '' ) {
@@ -732,7 +954,13 @@ final class VAPT_Security {
             return;
         }
 
-        $license = is_array( $config['license'] ?? null ) ? $config['license'] : [];
+        $license = [];
+        $local_license = class_exists( 'VAPT_License' ) ? VAPT_License::get_license() : false;
+        if ( is_array( $local_license ) ) {
+            $license = $local_license;
+        } else {
+            $license = is_array( $config['license'] ?? null ) ? $config['license'] : [];
+        }
         $wl = is_array( $config['white_label'] ?? null ) ? $config['white_label'] : [];
 
         $payload = [
@@ -743,7 +971,10 @@ final class VAPT_Security {
             'license_expiry'  => (int) ( $license['expires'] ?? 0 ),
             'license_status'  => 'active',
             'version'         => $wl['version'] ?? ( defined( 'VAPT_VERSION' ) ? VAPT_VERSION : '0.0.0' ),
-            'initial_install' => (int) ( $config['generated_at'] ?? time() ),
+            'initial_install' => (int) ( $client_times['install'] ?? ( $config['generated_at'] ?? time() ) ),
+            'client_install'  => (int) ( $client_times['install'] ?? 0 ),
+            'client_activation'=> (int) ( $client_times['activation'] ?? 0 ),
+            'ack_protocol'    => 1,
         ];
 
         $outbox = get_option( 'vapt_command_results_outbox', [] );
@@ -775,9 +1006,6 @@ final class VAPT_Security {
         if ( is_wp_error( $resp ) ) {
             return;
         }
-        if ( isset( $payload['command_results'] ) ) {
-            delete_option( 'vapt_command_results_outbox' );
-        }
 
         $body = wp_remote_retrieve_body( $resp );
         if ( ! is_string( $body ) || $body === '' ) {
@@ -790,6 +1018,9 @@ final class VAPT_Security {
         }
 
         $data = is_array( $json['data'] ?? null ) ? $json['data'] : [];
+        if ( isset( $payload['command_results'] ) && ! empty( $data['ack_received'] ) ) {
+            delete_option( 'vapt_command_results_outbox' );
+        }
         $commands = $data['commands'] ?? [];
         if ( is_array( $commands ) && ! empty( $commands ) ) {
             $this->vapt_process_remote_commands( $commands, $config );
@@ -813,6 +1044,9 @@ final class VAPT_Security {
         $license_status = sanitize_text_field( (string) ( $_POST['license_status'] ?? '' ) );
         $version        = sanitize_text_field( (string) ( $_POST['version'] ?? '' ) );
         $initial_install = absint( $_POST['initial_install'] ?? 0 );
+        $ack_protocol   = absint( $_POST['ack_protocol'] ?? 0 );
+        $client_install = absint( $_POST['client_install'] ?? 0 );
+        $client_activation = absint( $_POST['client_activation'] ?? 0 );
 
         $tracking = get_option( 'vapt_build_tracking', [] );
         if ( ! is_array( $tracking ) ) {
@@ -822,17 +1056,44 @@ final class VAPT_Security {
         $now = time();
         $existing = is_array( $tracking[ $build_id ] ?? null ) ? $tracking[ $build_id ] : [];
         $first_activation = isset( $existing['first_activation'] ) ? (int) $existing['first_activation'] : 0;
+        if ( $client_activation > 0 ) {
+            $first_activation = $first_activation ? min( $first_activation, $client_activation ) : $client_activation;
+        }
         if ( ! $first_activation ) {
             $first_activation = $now;
+        }
+
+        $install_ts = isset( $existing['initial_install'] ) ? (int) $existing['initial_install'] : 0;
+        if ( $client_install > 0 ) {
+            $install_ts = $install_ts ? min( $install_ts, $client_install ) : $client_install;
+        } elseif ( $initial_install > 0 ) {
+            $install_ts = $install_ts ? min( $install_ts, $initial_install ) : $initial_install;
+        }
+
+        $install_source = sanitize_text_field( (string) ( $existing['install_source'] ?? '' ) );
+        if ( $client_install > 0 ) {
+            $install_source = 'client';
+        } elseif ( $install_source === '' ) {
+            $install_source = $install_ts > 0 ? 'legacy' : 'unknown';
+        }
+
+        $activation_source = sanitize_text_field( (string) ( $existing['activation_source'] ?? '' ) );
+        if ( $client_activation > 0 ) {
+            $activation_source = 'client';
+        } elseif ( $activation_source === '' ) {
+            $activation_source = $first_activation > 0 ? 'legacy' : 'unknown';
         }
 
         $tracking[ $build_id ] = [
             'domain'          => $domain,
             'ip'              => $ip,
             'last_seen'       => $now,
-            'initial_install' => $initial_install ?: (int) ( $existing['initial_install'] ?? 0 ),
+            'initial_install' => $install_ts,
             'first_activation'=> $first_activation,
             'version'         => $version ?: (string) ( $existing['version'] ?? '' ),
+            'ack_protocol'    => $ack_protocol ?: (int) ( $existing['ack_protocol'] ?? 0 ),
+            'install_source'  => $install_source,
+            'activation_source' => $activation_source,
             'license'         => [
                 'type'          => $license_type,
                 'expiry'        => $license_expiry,
@@ -845,8 +1106,10 @@ final class VAPT_Security {
         update_option( 'vapt_build_tracking', $tracking, false );
 
         $results = $this->vapt_normalize_command_results( $_POST['command_results'] ?? null );
+        $ack_received = false;
         if ( ! empty( $results ) ) {
             $this->vapt_append_ack_log( $build_id, $results );
+            $ack_received = true;
         }
 
         $pending = get_option( 'vapt_pending_commands', [] );
@@ -874,7 +1137,7 @@ final class VAPT_Security {
             update_option( 'vapt_pending_commands', $pending, false );
         }
 
-        wp_send_json_success( [ 'commands' => $commands ] );
+        wp_send_json_success( [ 'commands' => $commands, 'ack_received' => $ack_received ] );
     }
 
     public function handle_pause_build_queue() {
@@ -932,11 +1195,360 @@ final class VAPT_Security {
     }
 
     public function display_license_expiry_notices() {
-        return;
+        if ( ! is_admin() ) {
+            return;
+        }
+        if ( $this->is_master_admin() || $this->is_master_site() ) {
+            return;
+        }
+        if ( ! current_user_can( 'manage_options' ) ) {
+            return;
+        }
+
+        $license = class_exists( 'VAPT_License' ) ? VAPT_License::get_license() : false;
+        if ( ! is_array( $license ) ) {
+            $config = $this->get_locked_config_payload();
+            $license = is_array( $config['license'] ?? null ) ? $config['license'] : [];
+        }
+
+        $type    = sanitize_text_field( (string) ( $license['type'] ?? '' ) );
+        $expires = absint( $license['expires'] ?? 0 );
+        $auto_renew = ! empty( $license['auto_renew'] );
+
+        if ( $type === 'developer' || $expires <= 0 ) {
+            return;
+        }
+
+        $now = time();
+        $seconds_left = $expires - $now;
+        $days_left = (int) floor( $seconds_left / DAY_IN_SECONDS );
+        $date_str = wp_date( get_option( 'date_format' ), $expires, wp_timezone() );
+
+        $notice_class = '';
+        $headline = '';
+        if ( $seconds_left <= 0 ) {
+            $notice_class = 'notice notice-error';
+            $headline = __( 'License Expired', 'vapt-security' );
+        } elseif ( $type === 'standard' || $type === 'pro' ) {
+            if ( $days_left <= 5 ) {
+                $notice_class = 'notice notice-error';
+                $headline = __( 'URGENT: License Expiring', 'vapt-security' );
+            } elseif ( $days_left <= 10 ) {
+                $notice_class = 'notice notice-warning';
+                $headline = __( 'Attention: License Expiring Soon', 'vapt-security' );
+            } elseif ( $days_left <= 20 ) {
+                $notice_class = 'notice notice-info';
+                $headline = __( 'Friendly Reminder: License Expiring', 'vapt-security' );
+            }
+        } elseif ( $type === 'demo' ) {
+            if ( $days_left <= 3 ) {
+                $notice_class = 'notice notice-error';
+                $headline = __( 'Final Notice: Demo Ending', 'vapt-security' );
+            } elseif ( $days_left <= 10 ) {
+                $notice_class = 'notice notice-warning';
+                $headline = __( 'Demo Ending Soon', 'vapt-security' );
+            }
+        } elseif ( $type === 'trial' ) {
+            if ( $days_left <= 3 ) {
+                $notice_class = 'notice notice-error';
+                $headline = __( 'Immediate Action: Trial Ending', 'vapt-security' );
+            }
+        }
+
+        if ( $notice_class === '' ) {
+            return;
+        }
+
+        $body = '';
+        if ( $seconds_left <= 0 ) {
+            $body = sprintf(
+                __( 'Your %1$s license expired on %2$s. Some features may stop working until the license is renewed.', 'vapt-security' ),
+                strtoupper( $type ),
+                $date_str
+            );
+        } else {
+            $days_label = sprintf(
+                _n( '%d day', '%d days', max( 0, $days_left ), 'vapt-security' ),
+                max( 0, $days_left )
+            );
+            $body = sprintf(
+                __( 'Your %1$s license expires on %2$s (%3$s remaining).', 'vapt-security' ),
+                strtoupper( $type ),
+                $date_str,
+                $days_label
+            );
+        }
+
+        if ( $auto_renew && $seconds_left > 0 ) {
+            $body .= ' ' . __( 'Auto-renew is enabled.', 'vapt-security' );
+        }
+
+        echo '<div class="' . esc_attr( $notice_class ) . '"><p><strong>' . esc_html( $headline ) . '</strong><br>' . esc_html( $body ) . '</p></div>';
     }
 
     public function display_callback_test_notice() {
-        return;
+        if ( ! is_admin() ) {
+            return;
+        }
+        if ( $this->is_master_admin() || $this->is_master_site() ) {
+            return;
+        }
+        if ( ! current_user_can( 'manage_options' ) ) {
+            return;
+        }
+
+        $config = $this->get_locked_config_payload();
+        if ( ! is_array( $config ) ) {
+            return;
+        }
+        if ( empty( $config['callback_test'] ) ) {
+            return;
+        }
+
+        $url = admin_url( 'admin-ajax.php' );
+        $nonce = wp_create_nonce( 'vapt_force_ping' );
+
+        echo '<div class="notice notice-info"><p><strong>' . esc_html__( 'Connection Test', 'vapt-security' ) . '</strong><br>' .
+             esc_html__( 'Use this one-time test to verify that this site can reach the master server for tracking and remote commands.', 'vapt-security' ) .
+             '</p><p>' .
+             '<button type="button" class="button button-primary" id="vapt-callback-test-btn">' . esc_html__( 'Test Callback to Master', 'vapt-security' ) . '</button> ' .
+             '<span id="vapt-callback-test-status" style="margin-left:10px;"></span>' .
+             '</p></div>';
+
+        echo '<script>(function($){$(function(){var btn=$("#vapt-callback-test-btn");if(!btn.length)return;btn.on("click",function(e){e.preventDefault();btn.prop("disabled",true);$("#vapt-callback-test-status").text("' . esc_js( __( 'Testing...', 'vapt-security' ) ) . '");$.post("' . esc_url_raw( $url ) . '",{action:"vapt_force_ping",nonce:"' . esc_js( $nonce ) . '"},function(r){btn.prop("disabled",false);if(r&&r.success&&r.data&&r.data.ok){$("#vapt-callback-test-status").css("color","#00a32a").text("' . esc_js( __( 'OK: master acknowledged the ping.', 'vapt-security' ) ) . '");}else{var msg=(r&&r.data&&r.data.message)?r.data.message:"' . esc_js( __( 'Ping failed.', 'vapt-security' ) ) . '";$("#vapt-callback-test-status").css("color","#d63638").text(msg);}}).fail(function(){btn.prop("disabled",false);$("#vapt-callback-test-status").css("color","#d63638").text("' . esc_js( __( 'AJAX request failed.', 'vapt-security' ) ) . '");});});});})(jQuery);</script>';
+    }
+
+    public function handle_force_ping() {
+        $nonce = sanitize_text_field( (string) ( $_POST['nonce'] ?? '' ) );
+        if (
+            ! wp_verify_nonce( $nonce, 'vapt_locked_config' ) &&
+            ! wp_verify_nonce( $nonce, 'vapt_force_ping' )
+        ) {
+            wp_send_json_error( [ 'message' => __( 'Invalid nonce.', 'vapt-security' ) ], 403 );
+        }
+
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( [ 'message' => __( 'Unauthorized', 'vapt-security' ) ], 403 );
+        }
+
+        $build_id = sanitize_text_field( (string) ( $_POST['build_id'] ?? '' ) );
+        $integrity_url = esc_url_raw( (string) ( $_POST['integrity_url'] ?? '' ) );
+        $tracking_mode = sanitize_text_field( (string) ( $_POST['tracking_mode'] ?? '' ) );
+        $domain = sanitize_text_field( (string) ( $_POST['domain'] ?? '' ) );
+
+        $config = null;
+        if ( $build_id === '' || $integrity_url === '' ) {
+            $config = $this->get_locked_config_payload();
+            if ( ! is_array( $config ) ) {
+                wp_send_json_error( [ 'message' => __( 'Missing locked config.', 'vapt-security' ) ], 400 );
+            }
+            $build_id = (string) ( $config['build_id'] ?? '' );
+            $integrity_url = (string) ( $config['integrity_url'] ?? '' );
+            $tracking_mode = (string) ( $config['tracking_mode'] ?? 'production' );
+            $domain = $domain !== '' ? $domain : (string) ( $_SERVER['HTTP_HOST'] ?? '' );
+            $domain = preg_replace( '/:\\d+$/', '', $domain );
+        }
+
+        if ( $build_id === '' || $integrity_url === '' ) {
+            wp_send_json_error( [ 'message' => __( 'Missing build_id or integrity_url.', 'vapt-security' ) ], 400 );
+        }
+        if ( $domain === '' ) {
+            $domain = preg_replace( '/:\\d+$/', '', (string) ( $_SERVER['HTTP_HOST'] ?? '' ) );
+        }
+
+        $license = [];
+        $wl = [];
+        if ( is_array( $config ) ) {
+            $license = is_array( $config['license'] ?? null ) ? $config['license'] : [];
+            $wl = is_array( $config['white_label'] ?? null ) ? $config['white_label'] : [];
+        }
+
+        $payload = [
+            'action'          => 'vapt_build_callback',
+            'build_id'        => $build_id,
+            'domain'          => $domain,
+            'license_type'    => $license['type'] ?? 'standard',
+            'license_expiry'  => (int) ( $license['expires'] ?? 0 ),
+            'license_status'  => 'active',
+            'version'         => $wl['version'] ?? ( defined( 'VAPT_VERSION' ) ? VAPT_VERSION : '0.0.0' ),
+            'initial_install' => is_array( $config ) ? (int) ( $config['generated_at'] ?? time() ) : time(),
+            'ack_protocol'    => 1,
+        ];
+
+        $sslverify = ! ( $this->is_local_environment() || $tracking_mode === 'local' );
+        $resp = wp_remote_post(
+            $integrity_url,
+            [
+                'body'      => $payload,
+                'timeout'   => 10,
+                'blocking'  => true,
+                'sslverify' => $sslverify,
+            ]
+        );
+
+        if ( is_wp_error( $resp ) ) {
+            wp_send_json_success( [
+                'ok'        => false,
+                'message'   => $resp->get_error_message(),
+                'url'       => $integrity_url,
+                'sslverify' => $sslverify ? 1 : 0,
+            ] );
+        }
+
+        $status = wp_remote_retrieve_response_code( $resp );
+        $body = (string) wp_remote_retrieve_body( $resp );
+        $ok = false;
+        $msg = '';
+
+        if ( $status === 200 ) {
+            $json = json_decode( $body, true );
+            if ( is_array( $json ) && ! empty( $json['success'] ) ) {
+                $ok = true;
+            } else {
+                $msg = __( 'Unexpected response from master.', 'vapt-security' );
+            }
+        } else {
+            $msg = sprintf( __( 'HTTP %d from master.', 'vapt-security' ), (int) $status );
+        }
+
+        $ping_key = 'vapt_last_callback_ping_' . md5( $build_id . '|' . $domain );
+        delete_transient( $ping_key );
+
+        wp_send_json_success( [
+            'ok'        => $ok,
+            'message'   => $ok ? __( 'OK', 'vapt-security' ) : $msg,
+            'status'    => $status,
+            'body'      => $body,
+            'url'       => $integrity_url,
+            'sslverify' => $sslverify ? 1 : 0,
+        ] );
+    }
+
+    public function handle_push_remote_command() {
+        check_ajax_referer( 'vapt_locked_config', 'nonce' );
+        if ( ! $this->is_master_admin() ) {
+            wp_send_json_error( [ 'message' => 'Unauthorized' ], 403 );
+        }
+
+        $build_id = sanitize_text_field( (string) ( $_POST['build_id'] ?? '' ) );
+        $cmd_type = sanitize_text_field( (string) ( $_POST['cmd_type'] ?? '' ) );
+        $cmd_val  = sanitize_text_field( (string) ( $_POST['cmd_val'] ?? '' ) );
+
+        if ( $build_id === '' || $cmd_type === '' ) {
+            wp_send_json_error( [ 'message' => __( 'Missing build_id or cmd_type.', 'vapt-security' ) ], 400 );
+        }
+
+        $tracking = get_option( 'vapt_build_tracking', [] );
+        $t = is_array( $tracking[ $build_id ] ?? null ) ? $tracking[ $build_id ] : [];
+        $lic = is_array( $t['license'] ?? null ) ? $t['license'] : [];
+        $current_type = sanitize_text_field( (string) ( $lic['type'] ?? 'standard' ) );
+        $current_expiry = absint( $lic['expiry'] ?? 0 );
+
+        $pending = get_option( 'vapt_pending_commands', [] );
+        if ( ! is_array( $pending ) ) {
+            $pending = [];
+        }
+        if ( ! isset( $pending[ $build_id ] ) || ! is_array( $pending[ $build_id ] ) ) {
+            $pending[ $build_id ] = [];
+        }
+
+        $now = time();
+        $queued = null;
+
+        if ( $cmd_type === 'EXTEND' ) {
+            $expiry = 0;
+            if ( $cmd_val === 'term' ) {
+                $base = $current_expiry > $now ? $current_expiry : $now;
+                if ( $current_type === 'pro' ) $expiry = $base + ( 365 * DAY_IN_SECONDS );
+                elseif ( $current_type === 'trial' ) $expiry = $base + ( 7 * DAY_IN_SECONDS );
+                elseif ( $current_type === 'demo' ) $expiry = $base + ( 15 * DAY_IN_SECONDS );
+                else $expiry = $base + ( 30 * DAY_IN_SECONDS );
+            } elseif ( ctype_digit( $cmd_val ) ) {
+                $days = absint( $cmd_val );
+                if ( $days <= 0 ) {
+                    wp_send_json_error( [ 'message' => __( 'Invalid days.', 'vapt-security' ) ], 400 );
+                }
+                $base = $current_expiry > $now ? $current_expiry : $now;
+                $expiry = $base + ( $days * DAY_IN_SECONDS );
+            } else {
+                $expiry = $this->vapt_parse_date_string_to_expiry_ts( $cmd_val );
+            }
+
+            if ( $expiry <= 0 ) {
+                wp_send_json_error( [ 'message' => __( 'Invalid expiry date. Use the site date format.', 'vapt-security' ) ], 400 );
+            }
+
+            $queued = [
+                'type'     => 'EXTEND_LICENSE',
+                'expiry'   => $expiry,
+                'queued_at'=> $now,
+            ];
+            $pending[ $build_id ][] = $queued;
+            update_option( 'vapt_pending_commands', $pending, false );
+
+            $dt_fmt = get_option( 'date_format' ) . ' ' . get_option( 'time_format' );
+            wp_send_json_success( [ 'message' => sprintf( __( 'Queued expiry update to %s.', 'vapt-security' ), wp_date( $dt_fmt, $expiry, wp_timezone() ) ) ] );
+        }
+
+        if ( $cmd_type === 'CHANGE_TYPE' ) {
+            $new_type = sanitize_text_field( $cmd_val );
+            if ( ! in_array( $new_type, [ 'standard', 'pro', 'developer', 'trial', 'demo' ], true ) ) {
+                wp_send_json_error( [ 'message' => __( 'Invalid license type.', 'vapt-security' ) ], 400 );
+            }
+            $queued = [
+                'type'        => 'CHANGE_TYPE',
+                'license_type'=> $new_type,
+                'queued_at'   => $now,
+            ];
+            $pending[ $build_id ][] = $queued;
+            update_option( 'vapt_pending_commands', $pending, false );
+            wp_send_json_success( [ 'message' => __( 'Queued license type change.', 'vapt-security' ) ] );
+        }
+
+        if ( $cmd_type === 'SUSPEND' ) {
+            $queued = [
+                'type'      => 'SUSPEND',
+                'queued_at' => $now,
+            ];
+            $pending[ $build_id ][] = $queued;
+            update_option( 'vapt_pending_commands', $pending, false );
+            wp_send_json_success( [ 'message' => __( 'Queued suspend request.', 'vapt-security' ) ] );
+        }
+
+        wp_send_json_error( [ 'message' => __( 'Unknown command type.', 'vapt-security' ) ], 400 );
+    }
+
+    public function handle_set_callback_test() {
+        check_ajax_referer( 'vapt_locked_config', 'nonce' );
+        if ( ! $this->is_master_admin() ) {
+            wp_send_json_error( [ 'message' => 'Unauthorized' ], 403 );
+        }
+
+        $build_id = sanitize_text_field( (string) ( $_POST['build_id'] ?? '' ) );
+        $enabled  = ! empty( $_POST['enabled'] );
+        if ( $build_id === '' ) {
+            wp_send_json_error( [ 'message' => __( 'Missing build_id', 'vapt-security' ) ], 400 );
+        }
+
+        $history = get_option( 'vapt_build_history', [] );
+        if ( ! is_array( $history ) ) {
+            $history = [];
+        }
+
+        $updated = false;
+        foreach ( $history as $i => $b ) {
+            if ( ! is_array( $b ) ) continue;
+            if ( (string) ( $b['id'] ?? '' ) !== $build_id ) continue;
+            $history[ $i ]['callback_test'] = $enabled ? 1 : 0;
+            $updated = true;
+            break;
+        }
+
+        if ( $updated ) {
+            update_option( 'vapt_build_history', $history, false );
+        }
+
+        wp_send_json_success( [ 'message' => __( 'Updated.', 'vapt-security' ), 'updated' => $updated ? 1 : 0 ] );
     }
 
     public function protect_wp_cron() {
@@ -1851,6 +2463,21 @@ final class VAPT_Security {
         // Enforce lock on activation
         if ( ! $this->is_master_admin() && ! $this->is_master_site() ) {
             $this->enforce_domain_lock( true );
+            $config = $this->get_locked_config_payload();
+            $build_id = is_array( $config ) ? (string) ( $config['build_id'] ?? '' ) : '';
+            if ( $build_id !== '' ) {
+                $meta = $this->vapt_get_client_build_meta();
+                $row  = is_array( $meta[ $build_id ] ?? null ) ? $meta[ $build_id ] : [];
+                $now = time();
+                if ( empty( $row['install'] ) ) {
+                    $row['install'] = $now;
+                }
+                if ( empty( $row['activation'] ) ) {
+                    $row['activation'] = $now;
+                }
+                $meta[ $build_id ] = $row;
+                $this->vapt_set_client_build_meta( $meta );
+            }
         }
 
         // Generate initial .htaccess rules
@@ -1861,7 +2488,19 @@ final class VAPT_Security {
      * Activate the license.
      */
     public function activate_license() {
-        VAPT_License::activate_license();
+        if ( $this->is_master_admin() || $this->is_master_site() ) {
+            VAPT_License::activate_license();
+            return;
+        }
+
+        $config = $this->get_locked_config_payload();
+        if ( ! is_array( $config ) ) {
+            VAPT_License::activate_license();
+            return;
+        }
+
+        $build_id = (string) ( $config['build_id'] ?? '' );
+        $this->vapt_maybe_seed_client_license( $config, $build_id );
     }
 
     /**
@@ -2323,9 +2962,25 @@ final class VAPT_Security {
                 $activation_ts = isset( $t['first_activation'] ) ? (int) $t['first_activation'] : 0;
                 $expiry_ts     = isset( $license['expiry'] ) ? (int) $license['expiry'] : 0;
 
+                $install_source = sanitize_text_field( (string) ( $t['install_source'] ?? '' ) );
+                if ( $install_source === '' ) {
+                    $install_source = $install_ts > 0 ? 'legacy' : 'unknown';
+                }
+                $activation_source = sanitize_text_field( (string) ( $t['activation_source'] ?? '' ) );
+                if ( $activation_source === '' ) {
+                    $activation_source = $activation_ts > 0 ? 'legacy' : 'unknown';
+                }
+
                 $install_date    = $install_ts ? wp_date( $datetime_format, $install_ts, wp_timezone() ) : 'N/A';
                 $activation_date = $activation_ts ? wp_date( $datetime_format, $activation_ts, wp_timezone() ) : 'N/A';
                 $expiry_date     = $expiry_ts ? wp_date( $datetime_format, $expiry_ts, wp_timezone() ) : __( 'Never', 'vapt-security' );
+
+                $install_src_label = $install_source === 'client' ? 'Client-reported' : ( $install_source === 'legacy' ? 'Legacy/estimated' : 'Unknown source' );
+                $activation_src_label = $activation_source === 'client' ? 'Client-reported' : ( $activation_source === 'legacy' ? 'Legacy/estimated' : 'Unknown source' );
+                $install_src_key = $install_source === 'client' ? 'client' : ( $install_source === 'legacy' ? 'legacy' : 'unknown' );
+                $activation_src_key = $activation_source === 'client' ? 'client' : ( $activation_source === 'legacy' ? 'legacy' : 'unknown' );
+                $install_src_badge = '<span class="vapt-ts-src vapt-ts-src-' . esc_attr( $install_src_key ) . '" title="' . esc_attr( $install_src_label ) . '">' . esc_html( strtoupper( substr( $install_src_key, 0, 1 ) ) ) . '</span>';
+                $activation_src_badge = '<span class="vapt-ts-src vapt-ts-src-' . esc_attr( $activation_src_key ) . '" title="' . esc_attr( $activation_src_label ) . '">' . esc_html( strtoupper( substr( $activation_src_key, 0, 1 ) ) ) . '</span>';
 
                 $build_version = $build_versions[ $bid ] ?? ( $t['version'] ?? '' );
                 $build_label   = $build_names[ $bid ] ?? '';
@@ -2369,8 +3024,8 @@ final class VAPT_Security {
                             <?php echo esc_html( $is_online ? 'ONLINE' : 'OFFLINE' ); ?>
                         </span>
                     </td>
-                    <td style="font-size: 11px;"><?php echo esc_html( (string) $install_date ); ?></td>
-                    <td style="font-size: 11px;"><?php echo esc_html( (string) $activation_date ); ?></td>
+                    <td style="font-size: 11px;"><?php echo esc_html( (string) $install_date ); ?> <?php echo $install_src_badge; ?></td>
+                    <td style="font-size: 11px;"><?php echo esc_html( (string) $activation_date ); ?> <?php echo $activation_src_badge; ?></td>
                     <td style="font-size: 11px; color: #666; width: 80px;">
                         <?php echo $auto_renew ? esc_html__( 'Yes', 'vapt-security' ) : esc_html__( 'No', 'vapt-security' ); ?>
                     </td>
@@ -2387,6 +3042,7 @@ final class VAPT_Security {
                             data-id="<?php echo esc_attr( (string) $bid ); ?>"
                             data-domain="<?php echo esc_attr( (string) $domain ); ?>"
                             data-expiry="<?php echo esc_attr( (string) ( $license['expiry'] ?? '' ) ); ?>"
+                            data-expiry-formatted="<?php echo esc_attr( (string) $expiry_date ); ?>"
                             data-type="<?php echo esc_attr( (string) ( $license['type'] ?? '' ) ); ?>"
                             title="<?php esc_attr_e( 'Manage Deployment', 'vapt-security' ); ?>">
                             <span class="dashicons dashicons-admin-settings" style="font-size: 16px; margin-top: 3px;"></span>
@@ -2466,6 +3122,7 @@ final class VAPT_Security {
                 $t          = is_array( $tracking[ $bid ] ?? null ) ? $tracking[ $bid ] : [];
                 $domain      = (string) ( $t['domain'] ?? ( $build_meta[ $bid ]['domain'] ?? '' ) );
                 $last_seen   = isset( $t['last_seen'] ) ? (int) $t['last_seen'] : 0;
+                $supports_ack = ! empty( $t['ack_protocol'] );
                 $mode        = (string) ( $build_meta[ $bid ]['tracking_mode'] ?? 'production' );
                 $interval = ( $mode === 'local' ) ? VAPT_TRACKING_INTERVAL_LOCAL : VAPT_TRACKING_INTERVAL_DEFAULT;
                 $auto_pause_window = $this->vapt_get_auto_pause_overdue_seconds();
@@ -2538,6 +3195,8 @@ final class VAPT_Security {
                     $last_result = implode( ' ', $parts );
                 } elseif ( ! $last_seen ) {
                     $last_result = __( 'No check-in recorded', 'vapt-security' );
+                } elseif ( ! $supports_ack ) {
+                    $last_result = __( 'ACK not supported (update build)', 'vapt-security' );
                 } else {
                     $last_result = __( 'Pending', 'vapt-security' );
                 }
@@ -2579,8 +3238,10 @@ final class VAPT_Security {
                         'ts'      => $last_seen,
                         'when'    => wp_date( $datetime_format, $last_seen, wp_timezone() ),
                         'ok'      => false,
-                        'type'    => 'DELIVERY',
-                        'message' => 'Client checked in but did not acknowledge results. Client may be running an older build.',
+                        'type'    => $supports_ack ? 'DELIVERY' : 'CAPABILITY',
+                        'message' => $supports_ack
+                            ? 'Client checked in but did not acknowledge results.'
+                            : 'Client is running an older build that does not support acknowledgements. Regenerate and redeploy the latest build to enable ACK.',
                     ];
                 }
                 if ( isset( $ack_log[ $bid ] ) && is_array( $ack_log[ $bid ] ) ) {

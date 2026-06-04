@@ -141,6 +141,35 @@ $csv_names = [
         background: #edfaef;
         color: #008a20;
     }
+    .vapt-ts-src {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 16px;
+        height: 16px;
+        border-radius: 999px;
+        font-size: 10px;
+        font-weight: 700;
+        margin-left: 6px;
+        border: 1px solid transparent;
+        line-height: 16px;
+        vertical-align: middle;
+    }
+    .vapt-ts-src-client {
+        background: #edfaef;
+        border-color: #b7e2c1;
+        color: #008a20;
+    }
+    .vapt-ts-src-legacy {
+        background: #f0f0f1;
+        border-color: #dcdcde;
+        color: #646970;
+    }
+    .vapt-ts-src-unknown {
+        background: #fcf0f1;
+        border-color: #f2b3b7;
+        color: #d63638;
+    }
     .vapt-category-title {
         font-size: 16px;
         font-weight: 600;
@@ -1004,7 +1033,7 @@ $csv_names = [
                                              <td><?php echo esc_html( $build['version'] ); ?></td>
                                              <td><span class="badge" style="background: #2271b1; color: #fff; padding: 2px 8px; border-radius: 10px; font-size: 10px;"><?php echo esc_html( strtoupper($build['license']) ); ?></span></td>
                                              <td style="font-size: 11px; color: #666; width: 80px;">
-                                                 <?php echo $build['auto_renew'] ? esc_html__( 'Yes', 'vapt-security' ) : esc_html__( 'No', 'vapt-security' ); ?>
+                                                <?php echo ! empty( $build['auto_renew'] ) ? esc_html__( 'Yes', 'vapt-security' ) : esc_html__( 'No', 'vapt-security' ); ?>
                                              </td>
                                              <td style="font-size: 11px; color: #666; width: 90px;">
                                                  <?php echo esc_html( $build['renewal_count'] ?? 0 ); ?>
@@ -1250,7 +1279,7 @@ $csv_names = [
                             </button>
                         </div>
                         <div class="vapt-modal-custom-row">
-                            <input type="date" id="vapt-custom-expiry" class="regular-text" min="<?php echo esc_attr( date_i18n( 'Y-m-d' ) ); ?>">
+                            <input type="text" id="vapt-custom-expiry" class="regular-text" placeholder="<?php echo esc_attr( wp_date( get_option( 'date_format' ), time(), wp_timezone() ) ); ?>">
                             <button type="button" class="button vapt-push-action" data-action="EXTEND" data-val="" id="vapt-apply-custom-term">
                                 <span class="dashicons dashicons-yes"></span>
                                 <?php esc_html_e( 'Apply', 'vapt-security' ); ?>
@@ -1992,15 +2021,16 @@ jQuery(document).ready(function($) {
         var domain = btn.data('domain');
         var licenseType = btn.data('type');
         var licenseExpiry = btn.data('expiry');
+        var licenseExpiryFormatted = btn.data('expiry-formatted');
         
         $('#vapt-manage-build-id').text(bid);
         $('#vapt-manage-domain').text(domain);
         $('#vapt-manage-license-type').text(licenseType.toUpperCase());
         
-        if (licenseExpiry && licenseExpiry > 0) {
-            var expiryDate = new Date(licenseExpiry * 1000);
-            var formatted = expiryDate.toLocaleDateString() + ' ' + expiryDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-            $('#vapt-manage-license-expiry').text(formatted);
+        if (licenseExpiryFormatted) {
+            $('#vapt-manage-license-expiry').text(licenseExpiryFormatted);
+        } else if (licenseExpiry && licenseExpiry > 0) {
+            $('#vapt-manage-license-expiry').text(String(licenseExpiry));
         } else {
             $('#vapt-manage-license-expiry').text('Never');
         }
@@ -2054,7 +2084,7 @@ jQuery(document).ready(function($) {
             return;
         }
         
-        var confirmMsg = 'Are you sure you want to set a custom expiry date of ' + customDate + '?';
+        var confirmMsg = 'Are you sure you want to set a custom expiry date of <strong>' + customDate + '</strong>?';
         vaptNotify.confirm('Custom Term', confirmMsg, function() {
             btn.prop('disabled', true).css('opacity', '0.5');
             
