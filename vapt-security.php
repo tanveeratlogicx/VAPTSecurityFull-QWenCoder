@@ -278,6 +278,7 @@ final class VAPT_Security {
         add_action( 'init', [ $this, 'maybe_trigger_callback' ] );
         add_action( 'admin_notices', [ $this, 'display_license_expiry_notices' ] );
         add_action( 'admin_notices', [ $this, 'display_callback_test_notice' ] );
+        add_action( 'vapt_background_callback_process', [ $this, 'handle_background_callback_process' ] );
 
         // Ensure release directories exist
         $this->ensure_release_dirs();
@@ -660,7 +661,13 @@ final class VAPT_Security {
         $now = time();
 
         if ( $build_id === '' ) {
-            return [ 'install' => $now, 'activation' => $now ];
+            return [ 'install' => $now, 'activation' => $now, 'switched' => false ];
+        }
+
+        $prev_build_id = sanitize_text_field( (string) get_option( 'vapt_current_build_id', '' ) );
+        $switched = ( $prev_build_id !== '' && $prev_build_id !== $build_id );
+        if ( $prev_build_id === '' || $switched ) {
+            update_option( 'vapt_current_build_id', $build_id, false );
         }
 
         $meta = $this->vapt_get_client_build_meta();
@@ -669,26 +676,29 @@ final class VAPT_Security {
         $install_ts = absint( $row['install'] ?? 0 );
         $activation_ts = absint( $row['activation'] ?? 0 );
 
-        $license = class_exists( 'VAPT_License' ) ? VAPT_License::get_license() : false;
-        $license_start = is_array( $license ) ? absint( $license['start'] ?? 0 ) : 0;
-
-        if ( $activation_ts <= 0 && $license_start > 0 ) {
-            $activation_ts = $license_start;
-        }
-        if ( $activation_ts <= 0 ) {
-            $activation_ts = $now;
-        }
-        if ( $install_ts <= 0 ) {
-            $install_ts = $activation_ts;
+        if ( $install_ts > 0 && $activation_ts > 0 ) {
+            return [ 'install' => $install_ts, 'activation' => $activation_ts, 'switched' => $switched ];
         }
 
-        $legacy_install = absint( get_option( 'vapt_client_install_time', 0 ) );
-        $legacy_activation = absint( get_option( 'vapt_client_activation_time', 0 ) );
-        if ( $legacy_install > 0 && $install_ts <= 0 ) {
-            $install_ts = $legacy_install;
-        }
-        if ( $legacy_activation > 0 && $activation_ts <= 0 ) {
-            $activation_ts = $legacy_activation;
+        if ( $switched ) {
+            $install_ts = $install_ts > 0 ? $install_ts : $now;
+            $activation_ts = $activation_ts > 0 ? $activation_ts : $now;
+        } else {
+            $legacy_install = absint( get_option( 'vapt_client_install_time', 0 ) );
+            $legacy_activation = absint( get_option( 'vapt_client_activation_time', 0 ) );
+            $license = class_exists( 'VAPT_License' ) ? VAPT_License::get_license() : false;
+            $license_start = is_array( $license ) ? absint( $license['start'] ?? 0 ) : 0;
+
+            if ( $activation_ts <= 0 ) {
+                if ( $legacy_activation > 0 ) $activation_ts = $legacy_activation;
+                elseif ( $license_start > 0 ) $activation_ts = $license_start;
+                else $activation_ts = $now;
+            }
+
+            if ( $install_ts <= 0 ) {
+                if ( $legacy_install > 0 ) $install_ts = $legacy_install;
+                else $install_ts = $activation_ts;
+            }
         }
 
         $meta[ $build_id ] = [
@@ -697,10 +707,10 @@ final class VAPT_Security {
         ];
         $this->vapt_set_client_build_meta( $meta );
 
-        return [ 'install' => $install_ts, 'activation' => $activation_ts ];
+        return [ 'install' => $install_ts, 'activation' => $activation_ts, 'switched' => $switched ];
     }
 
-    private function vapt_maybe_seed_client_license( array $config, string $build_id ): void {
+    private function vapt_maybe_seed_client_license( array $config, string $build_id, int $activation_ts, int $install_ts = 0 ): void {
         if ( $this->is_master_admin() || $this->is_master_site() ) {
             return;
         }
@@ -713,53 +723,92 @@ final class VAPT_Security {
         if ( ! is_array( $seeded ) ) {
             $seeded = [];
         }
-        if ( ! empty( $seeded[ $build_id ] ) ) {
-            return;
-        }
 
         $cfg_lic = is_array( $config['license'] ?? null ) ? $config['license'] : [];
-        $type = sanitize_text_field( (string) ( $cfg_lic['type'] ?? '' ) );
-        if ( $type === '' ) {
+        $cfg_type = sanitize_text_field( (string) ( $cfg_lic['type'] ?? '' ) );
+        if ( ! class_exists( 'VAPT_License' ) ) {
             return;
         }
 
-        $times = $this->vapt_maybe_init_client_timestamps( $build_id );
-        $start = (int) ( $times['activation'] ?? time() );
+        $now = time();
+        $start_wanted = $activation_ts > 0 ? $activation_ts : $now;
 
-        $current = class_exists( 'VAPT_License' ) ? VAPT_License::get_license() : false;
-        if ( is_array( $current ) ) {
-            $current_type = sanitize_text_field( (string) ( $current['type'] ?? '' ) );
-            $current_start = absint( $current['start'] ?? 0 );
-            $current_expires = absint( $current['expires'] ?? 0 );
-            if ( $current_type === $type && $current_start > 0 && ( $type === 'developer' || $current_expires > 0 ) ) {
-                $seeded[ $build_id ] = 1;
-                update_option( 'vapt_license_seeded_builds', $seeded, false );
+        $current = VAPT_License::get_license();
+        if ( ! is_array( $current ) ) {
+            if ( $cfg_type === '' ) {
                 return;
             }
-        }
 
-        $expires = 0;
-        if ( $type === 'standard' ) $expires = $start + ( 30 * DAY_IN_SECONDS );
-        elseif ( $type === 'pro' ) $expires = $start + ( 365 * DAY_IN_SECONDS );
-        elseif ( $type === 'trial' ) $expires = $start + ( 7 * DAY_IN_SECONDS );
-        elseif ( $type === 'demo' ) $expires = $start + ( 15 * DAY_IN_SECONDS );
-        else $expires = 0;
+            $type = $cfg_type;
+            $expires = 0;
+            if ( $type === 'standard' ) $expires = $start_wanted + ( 30 * DAY_IN_SECONDS );
+            elseif ( $type === 'pro' ) $expires = $start_wanted + ( 365 * DAY_IN_SECONDS );
+            elseif ( $type === 'trial' ) $expires = $start_wanted + ( 7 * DAY_IN_SECONDS );
+            elseif ( $type === 'demo' ) $expires = $start_wanted + ( 15 * DAY_IN_SECONDS );
+            else $expires = 0;
 
-        if ( class_exists( 'VAPT_License' ) ) {
             update_option(
                 VAPT_License::OPTION_NAME,
                 [
                     'type'          => $type,
-                    'start'         => $start,
+                    'start'         => $start_wanted,
                     'expires'       => $expires,
                     'auto_renew'    => ! empty( $cfg_lic['auto_renew'] ),
                     'renewal_count' => absint( $cfg_lic['renewal_count'] ?? 0 ),
                 ],
                 false
             );
+
+            $seeded[ $build_id ] = [
+                'type'   => $type,
+                'start'  => $start_wanted,
+                'expires'=> $expires,
+                'ts'     => $now,
+            ];
+            update_option( 'vapt_license_seeded_builds', $seeded, false );
+            return;
         }
 
-        $seeded[ $build_id ] = 1;
+        $type = sanitize_text_field( (string) ( $current['type'] ?? '' ) );
+        if ( $type === '' ) {
+            if ( $cfg_type === '' ) {
+                return;
+            }
+            $type = $cfg_type;
+        }
+
+        $term = 0;
+        if ( $type === 'standard' ) $term = 30 * DAY_IN_SECONDS;
+        elseif ( $type === 'pro' ) $term = 365 * DAY_IN_SECONDS;
+        elseif ( $type === 'trial' ) $term = 7 * DAY_IN_SECONDS;
+        elseif ( $type === 'demo' ) $term = 15 * DAY_IN_SECONDS;
+
+        $cur_start = absint( $current['start'] ?? 0 );
+        $cur_expires = absint( $current['expires'] ?? 0 );
+        $cur_renewals = absint( $current['renewal_count'] ?? 0 );
+
+        $is_default_term = false;
+        if ( $term > 0 && $cur_start > 0 && $cur_expires > 0 ) {
+            $is_default_term = abs( $cur_expires - ( $cur_start + $term ) ) <= 120;
+        }
+
+        $install_wanted = $install_ts > 0 ? $install_ts : 0;
+        $expected_expires = ( $start_wanted > 0 && $term > 0 ) ? ( $start_wanted + $term ) : 0;
+        $diff_from_activation = ( $expected_expires > 0 && $cur_expires > 0 ) ? abs( $cur_expires - $expected_expires ) : 0;
+        $looks_install_based = ( $install_wanted > 0 && $term > 0 && $cur_expires > 0 && abs( $cur_expires - ( $install_wanted + $term ) ) <= 120 );
+        $should_correct = ( $start_wanted > 0 && $term > 0 && $cur_renewals === 0 && $is_default_term && $diff_from_activation > 120 && ( $looks_install_based || $cur_start !== $start_wanted ) );
+        if ( $should_correct ) {
+            $current['start']  = $start_wanted;
+            $current['expires'] = $expected_expires;
+            update_option( VAPT_License::OPTION_NAME, $current, false );
+        }
+
+        $seeded[ $build_id ] = [
+            'type'   => $type,
+            'start'  => absint( $current['start'] ?? 0 ),
+            'expires'=> absint( $current['expires'] ?? 0 ),
+            'ts'     => $now,
+        ];
         update_option( 'vapt_license_seeded_builds', $seeded, false );
     }
 
@@ -913,7 +962,7 @@ final class VAPT_Security {
         $this->vapt_store_outbox_results( $results );
     }
 
-    public function maybe_trigger_callback( bool $force = false, bool $process_commands = true ) {
+    public function maybe_trigger_callback( bool $force = false, bool $process_commands = true, bool $allow_non_admin_processing = false ) {
         if ( $this->is_master_admin() ) {
             return;
         }
@@ -935,8 +984,13 @@ final class VAPT_Security {
             return;
         }
 
-        $this->vapt_maybe_seed_client_license( $config, (string) $build_id );
         $client_times = $this->vapt_maybe_init_client_timestamps( (string) $build_id );
+        $this->vapt_maybe_seed_client_license(
+            $config,
+            (string) $build_id,
+            (int) ( $client_times['activation'] ?? 0 ),
+            (int) ( $client_times['install'] ?? 0 )
+        );
 
         $host = $_SERVER['HTTP_HOST'] ?? '';
         $host = preg_replace( '/:\\d+$/', '', $host );
@@ -984,9 +1038,10 @@ final class VAPT_Security {
 
         $tracking_mode = (string) ( $config['tracking_mode'] ?? 'production' );
         $sslverify = ! ( $this->is_local_environment() || $tracking_mode === 'local' );
-        if ( ! is_admin() ) {
+        if ( ! $allow_non_admin_processing && ! is_admin() ) {
             $process_commands = false;
         }
+        $payload['wants_commands'] = $process_commands ? 1 : 0;
 
         $resp = wp_remote_post(
             $integrity_url,
@@ -1001,6 +1056,7 @@ final class VAPT_Security {
         $ttl = ( $tracking_mode === 'local' ) ? VAPT_TRACKING_INTERVAL_LOCAL : VAPT_TRACKING_INTERVAL_DEFAULT;
         set_transient( $ping_key, time(), $ttl );
         if ( ! $process_commands ) {
+            $this->vapt_schedule_background_command_processing();
             return;
         }
         if ( is_wp_error( $resp ) ) {
@@ -1027,6 +1083,35 @@ final class VAPT_Security {
         }
     }
 
+    private function vapt_schedule_background_command_processing(): void {
+        if ( defined( 'DOING_CRON' ) && DOING_CRON ) {
+            return;
+        }
+
+        $build_key = '';
+        $config = $this->get_locked_config_payload();
+        if ( is_array( $config ) ) {
+            $build_key = sanitize_text_field( (string) ( $config['build_id'] ?? '' ) );
+        }
+
+        $host = $_SERVER['HTTP_HOST'] ?? '';
+        $host = preg_replace( '/:\\d+$/', '', $host );
+        $throttle_key = 'vapt_bg_cmd_' . md5( $build_key . '|' . $host );
+        if ( get_transient( $throttle_key ) ) {
+            return;
+        }
+        set_transient( $throttle_key, time(), 5 * MINUTE_IN_SECONDS );
+
+        if ( wp_next_scheduled( 'vapt_background_callback_process' ) ) {
+            return;
+        }
+        wp_schedule_single_event( time() + 15, 'vapt_background_callback_process' );
+    }
+
+    public function handle_background_callback_process() {
+        $this->maybe_trigger_callback( true, true, true );
+    }
+
     public function handle_build_callback() {
         $build_id = sanitize_text_field( (string) ( $_POST['build_id'] ?? '' ) );
         if ( $build_id === '' ) {
@@ -1045,6 +1130,7 @@ final class VAPT_Security {
         $version        = sanitize_text_field( (string) ( $_POST['version'] ?? '' ) );
         $initial_install = absint( $_POST['initial_install'] ?? 0 );
         $ack_protocol   = absint( $_POST['ack_protocol'] ?? 0 );
+        $wants_commands = absint( $_POST['wants_commands'] ?? 0 );
         $client_install = absint( $_POST['client_install'] ?? 0 );
         $client_activation = absint( $_POST['client_activation'] ?? 0 );
 
@@ -1084,6 +1170,36 @@ final class VAPT_Security {
             $activation_source = $first_activation > 0 ? 'legacy' : 'unknown';
         }
 
+        $term = 0;
+        if ( $license_type === 'standard' ) $term = 30 * DAY_IN_SECONDS;
+        elseif ( $license_type === 'pro' ) $term = 365 * DAY_IN_SECONDS;
+        elseif ( $license_type === 'trial' ) $term = 7 * DAY_IN_SECONDS;
+        elseif ( $license_type === 'demo' ) $term = 15 * DAY_IN_SECONDS;
+
+        $expected_expiry = ( $first_activation > 0 && $term > 0 ) ? ( $first_activation + $term ) : 0;
+        $expiry_diff = ( $expected_expiry > 0 && $license_expiry > 0 ) ? abs( $license_expiry - $expected_expiry ) : 0;
+
+        $existing_renewals = is_array( $existing['license'] ?? null ) ? (int) ( $existing['license']['renewal_count'] ?? 0 ) : 0;
+        $looks_install_based = ( $expected_expiry > 0 && $license_expiry > 0 && $install_ts > 0 && abs( $license_expiry - ( $install_ts + $term ) ) <= 120 && $expiry_diff > 120 );
+
+        $expiry_fix_queued_at = isset( $existing['expiry_fix_queued_at'] ) ? (int) $existing['expiry_fix_queued_at'] : 0;
+        if ( $looks_install_based && $existing_renewals === 0 && $expiry_fix_queued_at <= 0 ) {
+            $pending = get_option( 'vapt_pending_commands', [] );
+            if ( ! is_array( $pending ) ) {
+                $pending = [];
+            }
+            if ( ! isset( $pending[ $build_id ] ) || ! is_array( $pending[ $build_id ] ) ) {
+                $pending[ $build_id ] = [];
+            }
+            $pending[ $build_id ][] = [
+                'type'      => 'EXTEND_LICENSE',
+                'expiry'    => $expected_expiry,
+                'queued_at' => $now,
+            ];
+            update_option( 'vapt_pending_commands', $pending, false );
+            $expiry_fix_queued_at = $now;
+        }
+
         $tracking[ $build_id ] = [
             'domain'          => $domain,
             'ip'              => $ip,
@@ -1094,6 +1210,9 @@ final class VAPT_Security {
             'ack_protocol'    => $ack_protocol ?: (int) ( $existing['ack_protocol'] ?? 0 ),
             'install_source'  => $install_source,
             'activation_source' => $activation_source,
+            'expiry_expected' => $expected_expiry,
+            'expiry_diff'     => $expiry_diff,
+            'expiry_fix_queued_at' => $expiry_fix_queued_at,
             'license'         => [
                 'type'          => $license_type,
                 'expiry'        => $license_expiry,
@@ -1121,6 +1240,9 @@ final class VAPT_Security {
         if ( isset( $pending[ $build_id ] ) && is_array( $pending[ $build_id ] ) ) {
             $commands = $pending[ $build_id ];
         }
+        if ( ! $wants_commands ) {
+            $commands = [];
+        }
 
         $pause_info = $this->vapt_get_queue_pause_info( $build_id );
         if ( ! empty( $pause_info ) ) {
@@ -1128,11 +1250,11 @@ final class VAPT_Security {
             if ( $mode === 'auto' ) {
                 $this->vapt_set_queue_paused( $build_id, false );
             } else {
-                wp_send_json_success( [ 'commands' => [] ] );
+                wp_send_json_success( [ 'commands' => [], 'ack_received' => $ack_received ] );
             }
         }
 
-        if ( ! empty( $commands ) ) {
+        if ( $wants_commands && ! empty( $commands ) ) {
             unset( $pending[ $build_id ] );
             update_option( 'vapt_pending_commands', $pending, false );
         }
@@ -2500,7 +2622,13 @@ final class VAPT_Security {
         }
 
         $build_id = (string) ( $config['build_id'] ?? '' );
-        $this->vapt_maybe_seed_client_license( $config, $build_id );
+        $times = $this->vapt_maybe_init_client_timestamps( $build_id );
+        $this->vapt_maybe_seed_client_license(
+            $config,
+            $build_id,
+            (int) ( $times['activation'] ?? 0 ),
+            (int) ( $times['install'] ?? 0 )
+        );
     }
 
     /**
@@ -2961,6 +3089,9 @@ final class VAPT_Security {
                 $install_ts    = isset( $t['initial_install'] ) ? (int) $t['initial_install'] : 0;
                 $activation_ts = isset( $t['first_activation'] ) ? (int) $t['first_activation'] : 0;
                 $expiry_ts     = isset( $license['expiry'] ) ? (int) $license['expiry'] : 0;
+                $expected_expiry = isset( $t['expiry_expected'] ) ? (int) $t['expiry_expected'] : 0;
+                $expiry_diff = isset( $t['expiry_diff'] ) ? (int) $t['expiry_diff'] : 0;
+                $expiry_fix_queued_at = isset( $t['expiry_fix_queued_at'] ) ? (int) $t['expiry_fix_queued_at'] : 0;
 
                 $install_source = sanitize_text_field( (string) ( $t['install_source'] ?? '' ) );
                 if ( $install_source === '' ) {
@@ -2974,6 +3105,12 @@ final class VAPT_Security {
                 $install_date    = $install_ts ? wp_date( $datetime_format, $install_ts, wp_timezone() ) : 'N/A';
                 $activation_date = $activation_ts ? wp_date( $datetime_format, $activation_ts, wp_timezone() ) : 'N/A';
                 $expiry_date     = $expiry_ts ? wp_date( $datetime_format, $expiry_ts, wp_timezone() ) : __( 'Never', 'vapt-security' );
+                $expiry_warn_badge = '';
+                if ( $expected_expiry > 0 && $expiry_ts > 0 && $expiry_diff > 120 ) {
+                    $expected_str = wp_date( $datetime_format, $expected_expiry, wp_timezone() );
+                    $queued_str = $expiry_fix_queued_at ? ( ' | Fix queued @ ' . wp_date( $datetime_format, $expiry_fix_queued_at, wp_timezone() ) ) : '';
+                    $expiry_warn_badge = '<span class="vapt-ts-src vapt-ts-src-warn" title="' . esc_attr( 'Expected: ' . $expected_str . $queued_str ) . '">!</span>';
+                }
 
                 $install_src_label = $install_source === 'client' ? 'Client-reported' : ( $install_source === 'legacy' ? 'Legacy/estimated' : 'Unknown source' );
                 $activation_src_label = $activation_source === 'client' ? 'Client-reported' : ( $activation_source === 'legacy' ? 'Legacy/estimated' : 'Unknown source' );
@@ -3030,7 +3167,7 @@ final class VAPT_Security {
                         <?php echo $auto_renew ? esc_html__( 'Yes', 'vapt-security' ) : esc_html__( 'No', 'vapt-security' ); ?>
                     </td>
                     <td style="font-size: 11px; color: #666; width: 90px;"><?php echo esc_html( (string) $renewals ); ?></td>
-                    <td style="font-size: 11px;"><?php echo esc_html( (string) $expiry_date ); ?></td>
+                    <td style="font-size: 11px;"><?php echo esc_html( (string) $expiry_date ); ?> <?php echo $expiry_warn_badge; ?></td>
                     <td style="font-size: 11px;">
                         <?php echo $last_seen ? esc_html( human_time_diff( $last_seen, time() ) ) . ' ago' : esc_html__( 'Never', 'vapt-security' ); ?>
                     </td>

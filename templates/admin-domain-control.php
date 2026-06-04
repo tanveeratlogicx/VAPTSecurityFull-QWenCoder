@@ -170,6 +170,11 @@ $csv_names = [
         border-color: #f2b3b7;
         color: #d63638;
     }
+    .vapt-ts-src-warn {
+        background: #fff8e5;
+        border-color: #f2c86a;
+        color: #9a6a00;
+    }
     .vapt-category-title {
         font-size: 16px;
         font-weight: 600;
