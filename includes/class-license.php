@@ -122,6 +122,16 @@ class VAPT_License {
     }
     
     /**
+     * Validate an IPv4 address.
+     * 
+     * @param string $ip The IP address to validate.
+     * @return bool True if the IP is a valid public IPv4 address.
+     */
+    public static function is_valid_ipv4( $ip ) {
+        return filter_var( $ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 ) !== false;
+    }
+
+    /**
      * Renew the license for a default term based on its type.
      * 
      * @return bool

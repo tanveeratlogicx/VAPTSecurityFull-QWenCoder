@@ -196,15 +196,17 @@ $csv_names = [
         max-width: 1150px;
     }
     .vapt-generator-table th {
-        width: 110px !important;
-        min-width: 110px !important;
-        padding: 4px 0 !important;
+        width: 130px !important;
+        min-width: 130px !important;
+        padding: 6px 0 !important;
         font-size: 12px;
         vertical-align: middle;
         color: #646970;
+        text-align: left;
     }
     .vapt-generator-table td {
-        padding: 4px 0 !important;
+        padding: 6px 0 !important;
+        vertical-align: middle;
     }
     .vapt-generator-table input[type="text"],
     .vapt-generator-table select,
@@ -804,21 +806,46 @@ $csv_names = [
                             </h3>
                             <table class="form-table vapt-generator-table" style="margin-top: 0;">
                                 <tr>
-                                    <th scope="row"><?php esc_html_e( 'Domain Pattern', 'vapt-security' ); ?></th>
+                                    <th scope="row"><?php esc_html_e( 'Lock Type', 'vapt-security' ); ?></th>
                                     <td>
-                                        <input type="text" id="vapt-lock-domain" class="regular-text" placeholder="*.example.com" value="<?php echo esc_attr( $_SERVER['HTTP_HOST'] ); ?>" style="width: 100%;">
-                                        <input type="hidden" id="vapt-build-id-tracking" value="">
-                                        <p class="description" style="font-size: 11px; margin-top: 5px;"><?php esc_html_e( 'Use * for wildcards (e.g., *.example.com).', 'vapt-security' ); ?></p>
+                                        <select id="vapt-lock-type" style="width: 100%;">
+                                            <option value="domain"><?php esc_html_e( 'Domain', 'vapt-security' ); ?></option>
+                                            <option value="ip"><?php esc_html_e( 'IPv4 Address', 'vapt-security' ); ?></option>
+                                        </select>
                                     </td>
                                 </tr>
                                 <tr>
+                                    <th scope="row" id="vapt-lock-value-label"><?php esc_html_e( 'Domain Pattern', 'vapt-security' ); ?></th>
+                                    <td>
+                                        <input type="text" id="vapt-lock-value" class="regular-text" 
+                                            placeholder="*.example.com" 
+                                            value="<?php 
+                                                $host = $_SERVER['HTTP_HOST'] ?? '';
+                                                echo esc_attr($host); 
+                                            ?>" 
+                                            style="width: 100%;">
+                                        <input type="hidden" id="vapt-build-id-tracking" value="">
+                                        <p class="description" id="vapt-lock-value-desc" style="font-size: 11px; margin-top: 5px;"><?php esc_html_e( 'Use * for wildcards (e.g., *.example.com).', 'vapt-security' ); ?></p>
+                                    </td>
+                                </tr>
+                                <tr id="vapt-domain-type-row">
                                     <th scope="row"><?php esc_html_e( 'Domain Type', 'vapt-security' ); ?></th>
                                     <td>
-                                        <select id="vapt-lock-type" style="width: 100%;">
+                                        <select id="vapt-domain-type" style="width: 100%;">
                                             <option value="standard"><?php esc_html_e( 'Standard - Full Match', 'vapt-security' ); ?></option>
                                             <option value="wildcard"><?php esc_html_e( 'Wildcard - Contains Match', 'vapt-security' ); ?></option>
                                             <option value="universal"><?php esc_html_e( 'Universal - Any Domain', 'vapt-security' ); ?></option>
                                         </select>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <th scope="row"><?php esc_html_e( 'Single Instance', 'vapt-security' ); ?></th>
+                                    <td>
+                                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                            <input type="checkbox" id="vapt-single-instance">
+                                            <span><?php esc_html_e( 'Restrict to one server at a time (IP-based)', 'vapt-security' ); ?></span>
+                                        </label>
+                                        <p class="description" style="font-size: 11px; margin-top: 5px;"><?php esc_html_e( 'Once activated, this build can only run on the first server that uses it.', 'vapt-security' ); ?></p>
                                     </td>
                                 </tr>
                                 <tr>
@@ -1065,6 +1092,9 @@ $csv_names = [
                                                 <button type="button" class="button button-small vapt-edit-build<?php echo $disabled_class; ?>" 
                                                      data-id="<?php echo esc_attr($build['id']); ?>" 
                                                      data-domain="<?php echo esc_attr($build['domain']); ?>"
+                                                     data-lock-type="<?php echo esc_attr($build['lock_type'] ?? 'domain'); ?>"
+                                                     data-lock-value="<?php echo esc_attr($build['lock_value'] ?? $build['domain']); ?>"
+                                                     data-single-instance="<?php echo esc_attr( ! empty($build['single_instance']) ? '1' : '0' ); ?>"
                                                      data-domain-type="<?php echo esc_attr($build['domain_type'] ?? 'standard'); ?>"
                                                      data-license-type="<?php echo esc_attr($build['license']); ?>"
                                                      data-name="<?php echo esc_attr($build['name']); ?>"
@@ -1538,18 +1568,28 @@ jQuery(document).ready(function($) {
         }
     });
 
-    // Domain Type logic
-    $('#vapt-lock-type').change(function(){
-        var type = $(this).val();
-        if (type === 'universal') {
-            $('#vapt-lock-domain').val('*').prop('disabled', true).css('background', '#f0f0f1');
+    // Lock Type logic (domain or ip)
+    var currentServerIP = '<?php echo esc_js( $_SERVER['SERVER_ADDR'] ?? '' ); ?>';
+
+    function updateLockTypeDisplay() {
+        var type = $('#vapt-lock-type').val();
+        if (type === 'ip') {
+            // IP mode
+            $('#vapt-lock-value-label').text('<?php echo esc_js( __( 'IPv4 Address', 'vapt-security' ) ); ?>');
+            $('#vapt-lock-value').attr('placeholder', '192.168.1.1').val(currentServerIP);
+            $('#vapt-lock-value-desc').text('<?php echo esc_js( __( 'Enter a valid IPv4 address to lock this build.', 'vapt-security' ) ); ?>');
+            $('#vapt-domain-type-row').hide();
         } else {
-            $('#vapt-lock-domain').prop('disabled', false).css('background', '#fff');
-            if ($('#vapt-lock-domain').val() === '*') {
-                $('#vapt-lock-domain').val('<?php echo esc_attr( $_SERVER['HTTP_HOST'] ); ?>');
-            }
+            // Domain mode
+            $('#vapt-lock-value-label').text('<?php echo esc_js( __( 'Domain Pattern', 'vapt-security' ) ); ?>');
+            $('#vapt-lock-value').attr('placeholder', '*.example.com').val('<?php echo esc_js( esc_attr( $_SERVER['HTTP_HOST'] ?? '' ) ); ?>');
+            $('#vapt-lock-value-desc').text('<?php echo esc_js( __( 'Use * for wildcards (e.g., *.example.com).', 'vapt-security' ) ); ?>');
+            $('#vapt-domain-type-row').show();
         }
-    });
+    }
+
+    $('#vapt-lock-type').change(updateLockTypeDisplay);
+    updateLockTypeDisplay(); // Initial call to set correct display on load
 
     // Tracking Mode logic
     $('#vapt-lock-tracking-mode').change(function(){
@@ -1629,8 +1669,10 @@ jQuery(document).ready(function($) {
         $.post(ajaxurl, {
             action: 'vapt_generate_locked_config',
             edit_id: $('#vapt-build-id-tracking').val(),
-            domain: $('#vapt-lock-domain').val(),
-            domain_type: $('#vapt-lock-type').val(),
+            lock_type: $('#vapt-lock-type').val(),
+            lock_value: $('#vapt-lock-value').val(),
+            single_instance: $('#vapt-single-instance').is(':checked') ? 1 : 0,
+            domain_type: $('#vapt-domain-type').val(),
             license_type: $('#vapt-lock-license-type').val(),
             auto_renew: $('#vapt-lock-license-auto-renew').is(':checked') ? 1 : 0,
             include_settings: $('#vapt-lock-include-settings').is(':checked') ? 1 : 0,
@@ -1662,8 +1704,10 @@ jQuery(document).ready(function($) {
         var params = {
             action: 'vapt_generate_client_zip',
             edit_id: $('#vapt-build-id-tracking').val(),
-            domain: $('#vapt-lock-domain').val(),
-            domain_type: $('#vapt-lock-type').val(),
+            lock_type: $('#vapt-lock-type').val(),
+            lock_value: $('#vapt-lock-value').val(),
+            single_instance: $('#vapt-single-instance').is(':checked') ? 1 : 0,
+            domain_type: $('#vapt-domain-type').val(),
             license_type: $('#vapt-lock-license-type').val(),
             auto_renew: $('#vapt-lock-license-auto-renew').is(':checked') ? 1 : 0,
             include_settings: $('#vapt-lock-include-settings').is(':checked') ? 1 : 0,
@@ -1739,8 +1783,15 @@ jQuery(document).ready(function($) {
     $(document).on('click', '.vapt-edit-build', function(){
         var btn = $(this);
         $('#vapt-build-id-tracking').val(btn.data('id')); // Track ID for update
-        $('#vapt-lock-domain').val(btn.data('domain')).trigger('change');
-        $('#vapt-lock-type').val(btn.data('domain-type')).trigger('change');
+        
+        // Set lock type and value
+        $('#vapt-lock-type').val(btn.data('lock-type')).trigger('change');
+        $('#vapt-lock-value').val(btn.data('lock-value'));
+        $('#vapt-single-instance').prop('checked', btn.data('single-instance') === '1' || btn.data('single-instance') === 1);
+        
+        // Set domain type (only relevant when lock_type === 'domain')
+        $('#vapt-domain-type').val(btn.data('domain-type'));
+        
         $('#vapt-lock-license-type').val(btn.data('license-type')).trigger('change');
         $('#vapt-lock-tracking-mode').val(btn.data('tracking-mode')).trigger('change');
         $('#vapt-lock-custom-url').val(btn.data('custom-url'));
