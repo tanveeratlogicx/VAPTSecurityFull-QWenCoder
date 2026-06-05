@@ -385,6 +385,31 @@ final class VAPT_Security {
         return false;
     }
 
+    /**
+     * Get the current server/client IP address, with support for proxies/CDNs
+     * 
+     * @return string The IP address, or empty string if not found
+     */
+    private function get_server_ip() {
+        $ip = '';
+        
+        // Check for proxy headers first (CDN/load balancer scenarios)
+        if ( ! empty( $_SERVER['HTTP_X_FORWARDED_FOR'] ) ) {
+            // X-Forwarded-For can contain multiple IPs; take the first (client IP)
+            $ips = explode( ',', $_SERVER['HTTP_X_FORWARDED_FOR'] );
+            $ip = trim( $ips[0] );
+        } elseif ( ! empty( $_SERVER['HTTP_X_REAL_IP'] ) ) {
+            $ip = $_SERVER['HTTP_X_REAL_IP'];
+        } elseif ( ! empty( $_SERVER['REMOTE_ADDR'] ) ) {
+            $ip = $_SERVER['REMOTE_ADDR'];
+        } elseif ( ! empty( $_SERVER['SERVER_ADDR'] ) ) {
+            $ip = $_SERVER['SERVER_ADDR'];
+        }
+        
+        // Validate and return
+        return filter_var( $ip, FILTER_VALIDATE_IP ) ? $ip : '';
+    }
+
     private function enforce_domain_lock( $force = false ) {
         $plugin_dir = plugin_dir_path( __FILE__ );
 
@@ -465,13 +490,36 @@ final class VAPT_Security {
             return true;
         }
 
+        // Determine lock type: domain, ip, or single_instance
+        $lock_type  = isset( $data['lock_type'] ) ? sanitize_text_field( $data['lock_type'] ) : 'domain';
+        $lock_value = isset( $data['lock_value'] ) ? sanitize_text_field( $data['lock_value'] ) : ( $data['domain_pattern'] ?? '' );
+
+        // Handle single_instance logic
+        $single_instance = ! empty( $data['single_instance'] );
+        if ( $single_instance ) {
+            $stored_ip = get_option( 'vapt_single_instance_ip_' . md5( $lock_value ) );
+            $current_ip = $this->get_server_ip();
+            if ( empty( $stored_ip ) ) {
+                update_option( 'vapt_single_instance_ip_' . md5( $lock_value ), $current_ip, false );
+            } elseif ( $stored_ip !== $current_ip ) {
+                return false;
+            }
+            // Continue to domain/IP check below
+        }
+
+        if ( $lock_type === 'ip' ) {
+            $current_ip = $this->get_server_ip();
+            return filter_var( $lock_value, FILTER_VALIDATE_IP ) !== false && $lock_value === $current_ip;
+        }
+
+        // Domain lock (default or domain type)
         $host = $_SERVER['HTTP_HOST'] ?? '';
         $host = preg_replace( '/:\\d+$/', '', $host );
         if ( $host === '' ) {
             return true;
         }
 
-        $pattern = $data['domain_pattern'] ?? '';
+        $pattern = $lock_value;
         if ( $pattern === '' ) {
             return false;
         }
@@ -3428,23 +3476,38 @@ final class VAPT_Security {
         wp_send_json_success( [ 'html' => $html ] );
     }
 
-    /**
-     * Generate Domain Locked Configuration File
-     */
     public function handle_generate_locked_config() {
         check_ajax_referer( 'vapt_locked_config', 'nonce' );
         
         // Superadmin Check
         $user = wp_get_current_user();
-        // We only check login here because AJAX requests might come from same domain but verify it's the superadmin
-        // In reality, this action is only accessible if you can see the page which is guarded.
         if ( ! $user->exists() || $user->user_login !== 'tanmalik786' ) {
             wp_send_json_error( [ 'message' => 'Unauthorized' ], 403 );
         }
 
-        $domain_pattern = sanitize_text_field( $_POST['domain'] ?? '' );
-        if ( empty( $domain_pattern ) ) {
-            wp_send_json_error( [ 'message' => __( 'Domain pattern is required.', 'vapt-security' ) ] );
+        // 1. Extract domain_pattern from lock_value (for config filename and tracking)
+        $lock_type     = sanitize_text_field( $_POST['lock_type'] ?? 'domain' );
+        $lock_value    = sanitize_text_field( $_POST['lock_value'] ?? '' );
+        if ( empty( $lock_value ) ) {
+            wp_send_json_error( [ 'message' => __( 'Lock value is required.', 'vapt-security' ) ] );
+        }
+        
+        // For domain type, domain_pattern is lock_value; for IP type, use a readable pattern
+        if ( $lock_type === 'domain' ) {
+            $domain_pattern = $lock_value;
+        } else {
+            // IP lock - create a pattern name for tracking
+            $domain_pattern = 'IP:' . $lock_value;
+        }
+        
+        $single_instance = ! empty( $_POST['single_instance'] );
+        
+        // Validate IP if lock_type is 'ip'
+        if ( $lock_type === 'ip' ) {
+            if ( ! VAPT_License::is_valid_ipv4( $lock_value ) ) {
+                wp_send_json_error( [ 'message' => __( 'Invalid IPv4 address format.', 'vapt-security' ) ] );
+                return;
+            }
         }
 
         $include_settings = ! empty( $_POST['include_settings'] );
@@ -3516,6 +3579,9 @@ final class VAPT_Security {
                 'requires_php'      => $wl_php
             ],
             'settings'       => $settings,
+            'lock_type'      => $lock_type,
+            'lock_value'     => $lock_value,
+            'single_instance'=> $single_instance,
             'generated_at'   => time(),
             'generated_by'   => $user->user_login
         ];
@@ -3584,11 +3650,31 @@ final class VAPT_Security {
             wp_send_json_error( [ 'message' => __( 'ZipArchive PHP extension is missing.', 'vapt-security' ) ] );
         }
 
-        // 1. Generate the Config Content (Reusing logic)
-        $domain_pattern = sanitize_text_field( $_POST['domain'] ?? '' );
-        if ( empty( $domain_pattern ) ) {
-            wp_send_json_error( [ 'message' => __( 'Domain pattern is required.', 'vapt-security' ) ] );
+        // 1. Extract domain_pattern from lock_value (for config filename and tracking)
+        $lock_type     = sanitize_text_field( $_POST['lock_type'] ?? 'domain' );
+        $lock_value    = sanitize_text_field( $_POST['lock_value'] ?? '' );
+        if ( empty( $lock_value ) ) {
+            wp_send_json_error( [ 'message' => __( 'Lock value is required.', 'vapt-security' ) ] );
         }
+        
+        // For domain type, domain_pattern is lock_value; for IP type, use a readable pattern
+        if ( $lock_type === 'domain' ) {
+            $domain_pattern = $lock_value;
+        } else {
+            // IP lock - create a pattern name for tracking
+            $domain_pattern = 'IP:' . $lock_value;
+        }
+        
+        $single_instance = ! empty( $_POST['single_instance'] );
+        
+        // Validate IP if lock_type is 'ip'
+        if ( $lock_type === 'ip' ) {
+            if ( ! VAPT_License::is_valid_ipv4( $lock_value ) ) {
+                wp_send_json_error( [ 'message' => __( 'Invalid IPv4 address format.', 'vapt-security' ) ] );
+                return;
+            }
+        }
+
         $include_settings = ! empty( $_POST['include_settings'] );
         $settings = $include_settings ? $this->get_config() : [];
         
@@ -3654,6 +3740,9 @@ final class VAPT_Security {
                 'requires_php'      => $wl_php
             ],
             'settings'       => $settings,
+            'lock_type'      => $lock_type,
+            'lock_value'     => $lock_value,
+            'single_instance'=> $single_instance,
             'generated_at'   => time(),
             'generated_by'   => $user->user_login
         ];
@@ -3892,6 +3981,9 @@ final class VAPT_Security {
             'status'      => 'active',
             'domain'      => $payload['domain_pattern'],
             'domain_type' => $payload['domain_type'] ?? 'standard',
+            'lock_type'   => $payload['lock_type'] ?? 'domain',
+            'lock_value'  => $payload['lock_value'] ?? $payload['domain_pattern'],
+            'single_instance' => ! empty( $payload['single_instance'] ),
             'tracking_mode' => $payload['tracking_mode'] ?? 'production',
             'integrity_url' => $payload['integrity_url'] ?? '',
             'name'        => $payload['white_label']['name'] ?: 'VAPT Security',
