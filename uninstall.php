@@ -38,8 +38,9 @@ $files_to_delete = [
 
 // Clean up any stray locked configs in root
 $root_configs = glob( $plugin_dir . 'vapt-*-locked-config.php*' );
-if ( $root_configs ) {
-    $files_to_delete = array_merge( $files_to_delete, $root_configs );
+$ip_root_configs = glob( $plugin_dir . 'VAPTIPv4-*-Config.php*' );
+if ( $root_configs || $ip_root_configs ) {
+    $files_to_delete = array_merge( $files_to_delete, $root_configs ?: [], $ip_root_configs ?: [] );
 }
 
 foreach ( $files_to_delete as $file ) {

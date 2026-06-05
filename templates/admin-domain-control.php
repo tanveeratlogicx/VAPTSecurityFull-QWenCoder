@@ -1019,6 +1019,8 @@ $csv_names = [
                                          <th><?php esc_html_e( 'Build ID', 'vapt-security' ); ?></th>
                                          <th><?php esc_html_e( 'Domain', 'vapt-security' ); ?></th>
                                          <th style="font-size: 11px; text-transform: capitalize; color: #666;"><?php esc_html_e( 'Type', 'vapt-security' ); ?></th>
+                                          <th>Lock</th>
+                                          <th>Single</th>
                                          <th><?php esc_html_e( 'Plugin Name', 'vapt-security' ); ?></th>
                                          <th><?php esc_html_e( 'Version', 'vapt-security' ); ?></th>
                                          <th><span class="badge" style="background: #2271b1; color: #fff; padding: 2px 8px; border-radius: 10px; font-size: 10px;"><?php esc_html_e( 'License', 'vapt-security' ); ?></span></th>
@@ -1034,7 +1036,7 @@ $csv_names = [
                                 $build_history = get_option( 'vapt_build_history', [] );
                                 if ( empty( $build_history ) ) : ?>
                                     <tr class="no-builds">
-                                        <td colspan="9" style="text-align: center; color: #999; padding: 30px;">
+                                        <td colspan="14" style="text-align: center; color: #999; padding: 30px;">
                                             <?php esc_html_e( 'No builds generated yet.', 'vapt-security' ); ?>
                                         </td>
                                     </tr>
@@ -1055,12 +1057,16 @@ $csv_names = [
                                         $file_path = plugin_dir_path( __FILE__ ) . '../' . $sub_dir . $filename;
                                         $file_exists = !empty($filename) && file_exists( $file_path );
                                         $download_url = $file_exists ? plugins_url( $sub_dir . $filename, dirname(__FILE__) . '/../vapt-security.php' ) : '';
+                                        $lock_icon = !empty($build["lock_type"]) ? "dashicons-lock" : "dashicons-unlock";
+                                        $single_icon = !empty($build["single_instance"]) ? "dashicons-yes" : "dashicons-no";
                                     ?>
                                         <tr class="<?php echo (isset($build['status']) && $build['status'] === 'suspended') ? 'vapt-row-suspended' : ''; ?>">
                                             <td><input type="checkbox" class="vapt-build-checkbox" value="<?php echo esc_attr( $build['id'] ); ?>"></td>
                                             <td><span class="vapt-build-id"><?php echo esc_html( $build['id'] ); ?></span></td>
                                              <td><?php echo esc_html( $build['domain'] ); ?></td>
                                              <td style="font-size: 11px; text-transform: capitalize; color: #666;"><?php echo esc_html( $build['domain_type'] ?? 'standard' ); ?></td>
+                                              <td style="font-size: 11px; color: #666; text-align: center;"><span class="dashicons <?php echo esc_attr( $lock_icon ); ?>"></span></td>                                              <td style="font-size: 11px; color: #666; text-align: center;"><span class="dashicons <?php echo esc_attr( $single_icon ); ?>"></span></td>
+                                              <td style="font-size: 11px; color: #666; text-align: center;"><span class="dashicons <?php echo esc_attr( $single_icon ); ?>"></span></td>
                                              <td><?php echo esc_html( $build['name'] ); ?></td>
                                              <td><?php echo esc_html( $build['version'] ); ?></td>
                                              <td><span class="badge" style="background: #2271b1; color: #fff; padding: 2px 8px; border-radius: 10px; font-size: 10px;"><?php echo esc_html( strtoupper($build['license']) ); ?></span></td>
@@ -1630,13 +1636,15 @@ jQuery(document).ready(function($) {
         updateVersionSuggestion(next);
     });
 
-    $('#vapt-lock-domain').on('change blur', function() {
-        var domain = $(this).val();
-        if (!domain || domain === '*') return;
-        
+    $('#vapt-lock-value').on('change blur', function() {
+        var lockValue = $(this).val();
+        if (!lockValue || lockValue === '*') return;
+        var lockType = $('#vapt-lock-type').val();
+
         $.post(ajaxurl, {
             action: 'vapt_get_last_build_version',
-            domain: domain,
+            domain: lockValue,
+            lock_type: lockType,
             nonce: '<?php echo wp_create_nonce( "vapt_locked_config" ); ?>'
         }, function(r) {
             if (r.success && r.data.version) {

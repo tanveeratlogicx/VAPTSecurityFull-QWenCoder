@@ -22,6 +22,10 @@ echo '<hr>';
 // 1. Check for locked config file
 $plugin_path = plugin_dir_path( __FILE__ );
 $files = glob( $plugin_path . 'vapt-*-locked-config.php*' );
+$ip_files = glob( $plugin_path . 'VAPTIPv4-*-Config.php*' );
+if ( is_array( $ip_files ) ) {
+    $files = is_array( $files ) ? array_merge( $files, $ip_files ) : $ip_files;
+}
 $legacy = $plugin_path . 'vapt-locked-config.php';
 $legacy_imported = $plugin_path . 'vapt-locked-config.php.imported';
 

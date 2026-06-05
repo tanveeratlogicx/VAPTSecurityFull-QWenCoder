@@ -255,7 +255,7 @@ final class VAPT_Security {
         $is_master_site = $this->is_master_site();
         $domain_lock_ok = ( $is_master || $is_master_site ) ? true : $this->enforce_domain_lock();
         if ( ! $domain_lock_ok && ! $is_master && ! $is_master_site ) {
-            $files = glob( plugin_dir_path( __FILE__ ) . 'vapt-*-locked-config.php*' );
+            $files = $this->find_config_files( plugin_dir_path( __FILE__ ) );
             // Only log when config files exist but lock still fails (real client-side problem)
             if ( ! empty( $files ) ) {
                 $host = $_SERVER['HTTP_HOST'] ?? 'unknown';
@@ -304,7 +304,7 @@ final class VAPT_Security {
         $root = plugin_dir_path( __FILE__ );
         
         // Move Configs — but skip .imported (already processed by enforce_domain_lock)
-        $configs = glob( $root . 'vapt-*-locked-config.php*' );
+        $configs = $this->find_config_files( $root );
         if ( ! empty( $configs ) ) {
             foreach ( $configs as $file ) {
                 $name = basename( $file );
@@ -410,16 +410,28 @@ final class VAPT_Security {
         return filter_var( $ip, FILTER_VALIDATE_IP ) ? $ip : '';
     }
 
+    /**
+     * Find locked config files matching both naming conventions.
+     *
+     * @param string $dir Directory to search in (with trailing slash).
+     * @return string[]
+     */
+    private function find_config_files( $dir ) {
+        $files = glob( $dir . 'vapt-*-locked-config.php*' ) ?: [];
+        $ip_files = glob( $dir . 'VAPTIPv4-*-Config.php*' ) ?: [];
+        return array_values( array_unique( array_merge( $files, $ip_files ) ) );
+    }
+
     private function enforce_domain_lock( $force = false ) {
         $plugin_dir = plugin_dir_path( __FILE__ );
 
         $candidates = [];
-        $release_configs = glob( $plugin_dir . 'releases/configurations/vapt-*-locked-config.php*' );
+        $release_configs = $this->find_config_files( $plugin_dir . 'releases/configurations/' );
         if ( ! empty( $release_configs ) ) {
             $candidates = array_merge( $candidates, $release_configs );
         }
 
-        $root_configs = glob( $plugin_dir . 'vapt-*-locked-config.php*' );
+        $root_configs = $this->find_config_files( $plugin_dir );
         if ( ! empty( $root_configs ) ) {
             $candidates = array_merge( $candidates, $root_configs );
         }
@@ -548,12 +560,12 @@ final class VAPT_Security {
 
         $candidates = [];
 
-        $release_configs = glob( $plugin_dir . 'releases/configurations/vapt-*-locked-config.php*' );
+        $release_configs = $this->find_config_files( $plugin_dir . 'releases/configurations/' );
         if ( ! empty( $release_configs ) ) {
             $candidates = array_merge( $candidates, $release_configs );
         }
 
-        $root_configs = glob( $plugin_dir . 'vapt-*-locked-config.php*' );
+        $root_configs = $this->find_config_files( $plugin_dir );
         if ( ! empty( $root_configs ) ) {
             $candidates = array_merge( $candidates, $root_configs );
         }
@@ -2994,10 +3006,15 @@ final class VAPT_Security {
      */
     public function handle_get_last_build_version() {
         check_ajax_referer( 'vapt_locked_config', 'nonce' );
-        
+
+        $lock_type = sanitize_text_field( $_POST['lock_type'] ?? 'domain' );
         $domain = sanitize_text_field( $_POST['domain'] ?? '' );
         if ( empty( $domain ) ) {
             wp_send_json_error( [ 'message' => 'Domain is required' ] );
+        }
+
+        if ( $lock_type === 'ip' ) {
+            $domain = 'IP:' . $domain;
         }
 
         $versions = get_option( 'vapt_locked_build_versions', [] );
@@ -3616,9 +3633,13 @@ final class VAPT_Security {
 ";
 
         // Sanitize domain for filename
-        $safe_domain = preg_replace( '/[^a-zA-Z0-9\-\.]/', '-', $domain_pattern );
-        $safe_domain = trim( $safe_domain, '-' );
-        $filename = "vapt-{$safe_domain}-locked-config.php";
+        if ( $lock_type === 'ip' ) {
+            $filename = "VAPTIPv4-{$lock_value}-Config.php";
+        } else {
+            $safe_domain = preg_replace( '/[^a-zA-Z0-9\-\.]/', '-', $domain_pattern );
+            $safe_domain = trim( $safe_domain, '-' );
+            $filename = "vapt-{$safe_domain}-locked-config.php";
+        }
         $file_path = plugin_dir_path( __FILE__ ) . 'releases/configurations/' . $filename;
 
         if ( file_put_contents( $file_path, $file_content ) ) {
@@ -3783,9 +3804,13 @@ final class VAPT_Security {
         $zip->addEmptyDir( $folder );
 
         // Add Config File
-        $safe_domain = preg_replace( '/[^a-zA-Z0-9\-\.]/', '-', $domain_pattern );
-        $safe_domain = trim( $safe_domain, '-' );
-        $config_filename = "vapt-{$safe_domain}-locked-config.php";
+        if ( $lock_type === 'ip' ) {
+            $config_filename = "VAPTIPv4-{$lock_value}-Config.php";
+        } else {
+            $safe_domain = preg_replace( '/[^a-zA-Z0-9\-\.]/', '-', $domain_pattern );
+            $safe_domain = trim( $safe_domain, '-' );
+            $config_filename = "vapt-{$safe_domain}-locked-config.php";
+        }
         $zip->addFromString( $folder . '/' . $config_filename, $config_content );
 
         // Read .buildincl allowlist
@@ -3914,14 +3939,16 @@ final class VAPT_Security {
         }
 
         // Sanitize domain for filename (replace dots with hyphens)
-        $filename_domain  = str_replace( '.', '-', $safe_domain );
-        $filename_slug    = ! empty( $wl_slug ) ? $wl_slug : 'security';
-
-        // Smart Version Handling for Filename (Avoid vv1.0.0)
         $clean_version    = ltrim( $wl_version, 'vV' );
-        $filename_version = 'v' . $clean_version;
 
-        $filename = "vapt-{$filename_slug}-{$filename_domain}-{$filename_version}.zip";
+        if ( $lock_type === 'ip' ) {
+            $filename = "VAPTIPv4-{$lock_value}-{$clean_version}.zip";
+        } else {
+            $filename_domain  = str_replace( '.', '-', $safe_domain );
+            $filename_slug    = ! empty( $wl_slug ) ? $wl_slug : 'security';
+            $filename_version = 'v' . $clean_version;
+            $filename = "vapt-{$filename_slug}-{$filename_domain}-{$filename_version}.zip";
+        }
 
         // Save a copy to the server for history
         $server_zip    = plugin_dir_path( __FILE__ ) . 'releases/builds/' . $filename;
