@@ -1997,7 +1997,7 @@ final class VAPT_Security {
 
         add_settings_field(
             'enable_cron',
-            __( 'Disable WP├â┬ó├óΓÇÜ┬¼├óΓé¼╦£Cron', 'vapt-security' ),
+            __( 'Disable WP‑Cron', 'vapt-security' ),
             [ $this, 'render_enable_cron_cb' ],
             'vapt_security_general',
             'vapt_security_general'
@@ -2139,13 +2139,13 @@ final class VAPT_Security {
         }
 
         /* ------------------------------------------------------------------ */
-        /* WP├â┬ó├óΓÇÜ┬¼├óΓé¼╦£Cron Protection tab                                         */
+        /* WP‑Cron Protection tab                                                     */
         /* ------------------------------------------------------------------ */
         // Only register if feature is enabled
         if ( VAPT_FEATURE_WP_CRON_PROTECTION ) {
             add_settings_section(
                 'vapt_security_cron',
-                __( 'WP├â┬ó├óΓÇÜ┬¼├óΓé¼╦£Cron Protection', 'vapt-security' ),
+                __( 'WP‑Cron Protection', 'vapt-security' ),
                 function() {
                     if ( VAPT_SHOW_FEATURE_INFO ) {
                         echo '<p>' . esc_html__( 'Protects against DoS attacks targeting the WordPress cron system.', 'vapt-security' ) . '</p>';
@@ -2444,7 +2444,7 @@ final class VAPT_Security {
         ?>
         <label>
             <input type="checkbox" name="vapt_security_options[enable_cron]" value="1" <?php echo $checked; ?> />
-            <?php esc_html_e( 'Disable WP├â┬ó├óΓÇÜ┬¼├óΓé¼╦£Cron (recommended for production sites)', 'vapt-security' ); ?>
+            <?php esc_html_e( 'Disable WP‑Cron (recommended for production sites)', 'vapt-security' ); ?>
         </label>
         <p class="description"><?php esc_html_e( 'Prevents abuse of the WordPress cron system by disabling the default behavior and requiring manual cron setup.', 'vapt-security' ); ?></p>
         <?php
@@ -2547,7 +2547,7 @@ final class VAPT_Security {
         ?>
         <label>
             <input type="checkbox" name="vapt_security_options[cron_protection]" value="1" <?php echo $checked; ?> />
-            <?php esc_html_e( 'Enable rate├â┬ó├óΓÇÜ┬¼├óΓé¼╦£limiting on wp-cron endpoints', 'vapt-security' ); ?>
+            <?php esc_html_e( 'Enable rate‑limiting on wp-cron endpoints', 'vapt-security' ); ?>
         </label>
         <p class="description"><?php esc_html_e( 'Protects against DoS attacks by limiting requests to wp-cron.php.', 'vapt-security' ); ?></p>
         <?php

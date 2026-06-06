@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 // Superadmin Domain Control Page
 // Check transient auth
 $user_id = get_current_user_id();
@@ -664,7 +664,7 @@ $csv_names = [
 <div id="vapt-build-loading-overlay" style="display:none;">
     <div class="vapt-spinner-box">
         <div class="vapt-spinner-ring"></div>
-        <p class="vapt-spinner-title"><?php esc_html_e( 'Generating Client Buildâ€¦', 'vapt-security' ); ?></p>
+        <p class="vapt-spinner-title"><?php esc_html_e( 'Generating Client Build…', 'vapt-security' ); ?></p>
         <p class="vapt-spinner-sub"><?php esc_html_e( 'Packaging plugin files. This may take a few seconds.', 'vapt-security' ); ?></p>
     </div>
 </div>
@@ -1754,7 +1754,7 @@ jQuery(document).ready(function($) {
                 btn.prop('disabled', false).text(originalText);
 
                 if ( r.success && r.data.needs_confirm ) {
-                    // Duplicate filename â€” ask user what to do
+                    // Duplicate filename — ask user what to do
                     vaptNotify.confirm(
                         '<?php echo esc_js( __( 'File Already Exists', 'vapt-security' ) ); ?>',
                         r.data.message + '<br><br><?php echo esc_js( __( 'Choose: <strong>Overwrite</strong> replaces the existing file. <strong>Save as New</strong> appends a timestamp.', 'vapt-security' ) ); ?>',
@@ -2239,14 +2239,14 @@ jQuery(document).ready(function($) {
         });
     });
 
-    // Include Callback Test toggle â€” state is baked into the generated config, no server save needed here
+    // Include Callback Test toggle — state is baked into the generated config, no server save needed here
 
-    // Dismiss callback test notice (session only â€” re-appears until config is regenerated without the toggle)
+    // Dismiss callback test notice (session only — re-appears until config is regenerated without the toggle)
     $('#vapt-diag-dismiss-btn').click(function() {
         $('#vapt-callback-diag').slideUp(200);
     });
 
-    // TEMP: Callback diagnostic â€” fires from client site to master
+    // TEMP: Callback diagnostic — fires from client site to master
     $('#vapt-diag-ping-btn').click(function() {
         var btn = $(this);
         btn.prop('disabled', true).text('<?php echo esc_js( __( 'Testing...', 'vapt-security' ) ); ?>');
