@@ -3,7 +3,7 @@
  * Plugin Name: VAPTSecurity–Full
  * Plugin URI:  https://github.com/tanveeratlogicx/vapt-security-full
  * Description: A comprehensive WordPress plugin that protects against DoS via wp-cron, enforces strict input validation, and throttles form submissions.
- * Version:     3.4.5
+ * Version:     3.5.0
  * Requires at least: 6.3
  * Requires PHP: 8.0
  * Author:      Tanveer Malik
