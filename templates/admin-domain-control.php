@@ -1704,6 +1704,10 @@ jQuery(document).ready(function($) {
             } else {
                 vaptNotify.error('<?php echo esc_js( __( 'Error', 'vapt-security' ) ); ?>', r.data.message);
             }
+        })
+        .fail(function(){
+            btn.prop('disabled', false).text(originalText);
+            vaptNotify.error('<?php echo esc_js( __( 'Connection Error', 'vapt-security' ) ); ?>', '<?php echo esc_js( __( 'Request failed. Please try again.', 'vapt-security' ) ); ?>');
         });
     });
 
@@ -1937,6 +1941,10 @@ jQuery(document).ready(function($) {
                 // Trigger checkbox listener update if needed
                 $('.vapt-build-checkbox').trigger('change');
             }
+        })
+        .fail(function() {
+            table.css('opacity', '1');
+            vaptNotify.error('<?php echo esc_js( __( 'Table Refresh Failed', 'vapt-security' ) ); ?>', '<?php echo esc_js( __( 'Could not update build history table. Please reload the page.', 'vapt-security' ) ); ?>');
         });
     }
 

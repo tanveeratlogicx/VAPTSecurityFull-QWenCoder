@@ -3493,6 +3493,146 @@ final class VAPT_Security {
         wp_send_json_success( [ 'html' => $html ] );
     }
 
+    /**
+     * Get Build History Table HTML via AJAX
+     */
+    public function handle_get_history_table() {
+        check_ajax_referer( 'vapt_locked_config', 'nonce' );
+        
+        if ( ! $this->is_master_admin() ) {
+            wp_send_json_error( [ 'message' => 'Unauthorized' ], 403 );
+        }
+
+        $build_history = get_option( 'vapt_build_history', [] );
+        
+        ob_start();
+        
+        if ( empty( $build_history ) ) : ?>
+            <tr class="no-builds">
+                <td colspan="14" style="text-align: center; color: #999; padding: 30px;">
+                    <?php esc_html_e( 'No builds generated yet.', 'vapt-security' ); ?>
+                </td>
+            </tr>
+        <?php else : 
+            // Show last 10 builds
+            $history = array_reverse( $build_history );
+            $history = array_slice( $history, 0, 10 );
+            foreach ( $history as $build ) : 
+                $filename = !empty($build['filename']) ? $build['filename'] : '';
+                if ( empty($filename) ) {
+                    // Fallback for older logs without filename
+                    $safe_domain = preg_replace( '/[^a-zA-Z0-9\-\.]/', '-', $build['domain'] );
+                    $safe_domain = trim( $safe_domain, '-' );
+                    $filename = ($build['type'] === 'zip') ? "vapt-security-{$safe_domain}.zip" : "vapt-{$safe_domain}-locked-config.php";
+                }
+                
+                $sub_dir = ($build['type'] === 'zip') ? 'releases/builds/' : 'releases/configurations/';
+                $file_path = plugin_dir_path( __FILE__ ) . $sub_dir . $filename;
+                $file_exists = !empty($filename) && file_exists( $file_path );
+                $download_url = $file_exists ? plugins_url( $sub_dir . $filename, __FILE__ ) : '';
+                $lock_icon = !empty($build["lock_type"]) ? "dashicons-lock" : "dashicons-unlock";
+                $single_icon = !empty($build["single_instance"]) ? "dashicons-yes" : "dashicons-no";
+            ?>
+                <tr class="<?php echo (isset($build['status']) && $build['status'] === 'suspended') ? 'vapt-row-suspended' : ''; ?>">
+                    <td><input type="checkbox" class="vapt-build-checkbox" value="<?php echo esc_attr( $build['id'] ); ?>"></td>
+                    <td><span class="vapt-build-id"><?php echo esc_html( $build['id'] ); ?></span></td>
+                    <td><?php echo esc_html( $build['domain'] ); ?></td>
+                    <td style="font-size: 11px; text-transform: capitalize; color: #666;"><?php echo esc_html( $build['domain_type'] ?? 'standard' ); ?></td>
+                    <td style="font-size: 11px; color: #666; text-align: center;"><span class="dashicons <?php echo esc_attr( $lock_icon ); ?>"></span></td>
+                    <td style="font-size: 11px; color: #666; text-align: center;"><span class="dashicons <?php echo esc_attr( $single_icon ); ?>"></span></td>
+                    <td><?php echo esc_html( $build['name'] ); ?></td>
+                    <td><?php echo esc_html( $build['version'] ); ?></td>
+                    <td><span class="badge" style="background: #2271b1; color: #fff; padding: 2px 8px; border-radius: 10px; font-size: 10px;"><?php echo esc_html( strtoupper($build['license']) ); ?></span></td>
+                    <td style="font-size: 11px; color: #666; width: 80px;">
+                        <?php echo ! empty( $build['auto_renew'] ) ? esc_html__( 'Yes', 'vapt-security' ) : esc_html__( 'No', 'vapt-security' ); ?>
+                    </td>
+                    <td style="font-size: 11px; color: #666; width: 90px;">
+                        <?php echo esc_html( $build['renewal_count'] ?? 0 ); ?>
+                    </td>
+                    <td style="font-size: 11px; color: #666;">
+                        <?php echo esc_html( wp_date( get_option( 'date_format' ), $build['time'], wp_timezone() ) ); ?>
+                    </td>
+                    <td style="font-size: 11px; color: #666;">
+                        <?php 
+                            if ( empty($build['expires']) || $build['license'] === 'developer' ) {
+                                echo esc_html__( 'Never', 'vapt-security' );
+                            } else {
+                                echo esc_html( wp_date( get_option( 'date_format' ), $build['expires'], wp_timezone() ) );
+                            }
+                        ?>
+                    </td>
+                    <td style="display: flex; gap: 5px; align-items: center;">
+                        <?php 
+                        $is_suspended = (isset($build['status']) && $build['status'] === 'suspended');
+                        $disabled_class = $is_suspended ? ' vapt-btn-disabled' : '';
+                        ?>
+                        <?php if ( $file_exists ) : ?>
+                            <a href="<?php echo esc_url( $download_url ); ?>" class="button button-small<?php echo $disabled_class; ?>" download title="<?php echo ($build['type'] === 'zip') ? esc_attr__( 'Download ZIP Package', 'vapt-security' ) : esc_attr__( 'Download Config File', 'vapt-security' ); ?>" style="padding: 0 6px;">
+                                <span class="dashicons <?php echo ($build['type'] === 'zip') ? 'dashicons-archive' : 'dashicons-download'; ?>" style="font-size: 16px; width: 16px; height: 16px; line-height: 16px; margin-top: 3px;"></span>
+                            </a>
+                        <?php endif; ?>
+                        <button type="button" class="button button-small vapt-edit-build<?php echo $disabled_class; ?>" 
+                             data-id="<?php echo esc_attr($build['id']); ?>" 
+                             data-domain="<?php echo esc_attr($build['domain']); ?>"
+                             data-lock-type="<?php echo esc_attr($build['lock_type'] ?? 'domain'); ?>"
+                             data-lock-value="<?php echo esc_attr($build['lock_value'] ?? $build['domain']); ?>"
+                             data-single-instance="<?php echo esc_attr( ! empty($build['single_instance']) ? '1' : '0' ); ?>"
+                             data-domain-type="<?php echo esc_attr($build['domain_type'] ?? 'standard'); ?>"
+                             data-license-type="<?php echo esc_attr($build['license']); ?>"
+                             data-name="<?php echo esc_attr($build['name']); ?>"
+                             data-version="<?php echo esc_attr($build['version']); ?>"
+                             data-author="<?php echo esc_attr($build['white_label']['author'] ?? ''); ?>"
+                             data-company="<?php echo esc_attr($build['white_label']['company'] ?? ''); ?>"
+                             data-desc="<?php echo esc_attr($build['white_label']['description'] ?? ''); ?>"
+                             data-wp="<?php echo esc_attr($build['white_label']['requires_at_least'] ?? '5.6'); ?>"
+                             data-php="<?php echo esc_attr($build['white_label']['requires_php'] ?? '8.0'); ?>"
+                             data-tracking-mode="<?php echo esc_attr($build['tracking_mode'] ?? 'production'); ?>"
+                             data-custom-url="<?php echo esc_attr($build['integrity_url'] ?? ''); ?>"
+                             data-callback-test="<?php echo esc_attr( ! empty( $build['callback_test'] ) ? '1' : '0' ); ?>"
+                             data-auto-renew="<?php echo esc_attr( ! empty( $build['auto_renew'] ) ? '1' : '0' ); ?>"
+                             data-renewal-count="<?php echo esc_attr( $build['renewal_count'] ?? 0 ); ?>"
+                            title="<?php esc_attr_e( 'Edit/Reuse settings', 'vapt-security' ); ?>" style="padding: 0 6px;">
+                            <span class="dashicons dashicons-edit" style="font-size: 16px; width: 16px; height: 16px; line-height: 16px; margin-top: 3px;"></span>
+                        </button>
+
+                        <button type="button" class="button button-small vapt-export-single" 
+                            data-id="<?php echo esc_attr($build['id']); ?>" 
+                            title="<?php esc_attr_e( 'Export Record', 'vapt-security' ); ?>" style="padding: 0 6px;">
+                            <span class="dashicons dashicons-upload" style="font-size: 16px; width: 16px; height: 16px; line-height: 16px; margin-top: 3px;"></span>
+                        </button>
+                        <div class="vapt-action-group" style="display: flex; gap: 2px; border-left: 1px solid #eee; padding-left: 5px; margin-left: 2px;">
+                            <?php if ( $is_suspended ) : ?>
+                                <button type="button" class="button button-small vapt-suspend-build" 
+                                    data-id="<?php echo esc_attr($build['id']); ?>" 
+                                    data-status="suspended"
+                                    style="color: #2271b1; padding: 0 6px;" 
+                                    title="<?php esc_attr_e( 'Resume Build', 'vapt-security' ); ?>">
+                                    <span class="dashicons dashicons-undo" style="font-size: 16px; width: 16px; height: 16px; line-height: 16px; margin-top: 3px;"></span>
+                                </button>
+                                <button type="button" class="button button-small vapt-delete-build" 
+                                    data-id="<?php echo esc_attr($build['id']); ?>" 
+                                    style="color: #d63638; padding: 0 6px;" 
+                                    title="<?php esc_attr_e( 'Purge Record', 'vapt-security' ); ?>">
+                                    <span class="dashicons dashicons-trash" style="font-size: 16px; width: 16px; height: 16px; line-height: 16px; margin-top: 3px;"></span>
+                                </button>
+                            <?php else : ?>
+                                <button type="button" class="button button-small vapt-suspend-build" 
+                                    data-id="<?php echo esc_attr($build['id']); ?>" 
+                                    data-status="active"
+                                    style="color: #46b450; padding: 0 6px;" 
+                                    title="<?php esc_attr_e( 'Suspend Build', 'vapt-security' ); ?>">
+                                    <span class="dashicons dashicons-lock" style="font-size: 16px; width: 16px; height: 16px; line-height: 16px; margin-top: 3px;"></span>
+                                </button>
+                            <?php endif; ?>
+                        </div>
+                    </td>
+                </tr>
+            <?php endforeach; endif;
+        
+        $html = trim( (string) ob_get_clean() );
+        wp_send_json_success( [ 'html' => $html ] );
+    }
+
     public function handle_generate_locked_config() {
         check_ajax_referer( 'vapt_locked_config', 'nonce' );
         
@@ -3652,7 +3792,7 @@ final class VAPT_Security {
                 'filename' => $filename
             ]);
         } else {
-             wp_send_json_error( [ 'message' => __( 'Failed to write configuration file to server.', 'vapt-security' ) ] );
+            wp_send_json_error( [ 'message' => __( 'Failed to write configuration file to server.', 'vapt-security' ) ] );
         }
     }
 
